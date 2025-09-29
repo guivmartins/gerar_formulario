@@ -10,9 +10,6 @@ if "formulario" not in st.session_state:
         "secoes": []
     }
 
-if "titulo_secao" not in st.session_state:
-    st.session_state["titulo_secao"] = ""
-
 # Funções utilitárias
 def adicionar_secao(titulo):
     st.session_state.formulario["secoes"].append({
@@ -40,12 +37,13 @@ st.divider()
 
 # Adicionar nova seção
 with st.expander("➕ Adicionar Seção"):
-    titulo_secao = st.text_input("Título da Seção", key="titulo_secao")
+    new_titulo_secao = st.text_input("Título da Seção", key="new_titulo_secao")
     if st.button("Adicionar Seção"):
-        if titulo_secao.strip():
-            adicionar_secao(titulo_secao.strip())
-            st.success(f"Seção '{titulo_secao}' adicionada com sucesso!")
-            st.session_state["titulo_secao"] = ""  # limpa o campo
+        if new_titulo_secao.strip():
+            adicionar_secao(new_titulo_secao.strip())
+            st.success(f"Seção '{new_titulo_secao}' adicionada com sucesso!")
+            # resetar campo após adicionar
+            st.session_state["new_titulo_secao"] = ""
 
 # Mostrar as seções existentes
 for i, secao in enumerate(st.session_state.formulario["secoes"]):
