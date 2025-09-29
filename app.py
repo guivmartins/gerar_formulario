@@ -1,7 +1,87 @@
 import streamlit as st
 import xml.etree.ElementTree as ET
 
-# Inicializar sessão
+# =========================
+# Funções auxiliares
+# =========================
+def gerar_chave_dominio(titulo, existentes):
+    base = "".join(c for c in titulo.upper() if c.isalnum())[:20]
+    chave = base
+    i = 1
+    while chave in existentes:
+        chave = f"{base}{i}"
+        i += 1
+    return chave
+
+def gerar_xml(formulario):
+    root = ET.Element("gxsi:formulario", {
+        "xmlns:gxsi": "http://www.w3.org/2001/XMLSchema-instance",
+        "nome": formulario["nome"],
+        "versao": formulario["versao"]
+    })
+
+    dominios_elem = ET.SubElement(root, "dominios")
+    chaves_dominios = set()
+
+    elementos_elem = ET.SubElement(root, "elementos")
+
+    for secao in formulario["secoes"]:
+        secao_elem = ET.SubElement(elementos_elem, "elemento", {
+            "gxsi:type": "seccao",
+            "titulo": secao["titulo"],
+            "largura": str(secao["largura"])
+        })
+        secao_elementos = ET.SubElement(secao_elem, "elementos")
+
+        for campo in secao["campos"]:
+            if campo["tipo"] == "paragrafo":
+                ET.SubElement(secao_elementos, "elemento", {
+                    "gxsi:type": "paragrafo",
+                    "valor": campo["valor"],
+                    "largura": str(campo["largura"])
+                })
+            elif campo["tipo"] in ["grupoRadio", "grupoCheck"]:
+                chave = gerar_chave_dominio(campo["titulo"], chaves_dominios)
+                chaves_dominios.add(chave)
+
+                # Criar domínio
+                dominio_elem = ET.SubElement(dominios_elem, "dominio", {
+                    "gxsi:type": "dominioEstatico",
+                    "chave": chave
+                })
+                for item in campo["dominios"]:
+                    ET.SubElement(dominio_elem, "item", {
+                        "gxsi:type": "dominioItemValor",
+                        "descricao": item["descricao"],
+                        "valor": item["valor"]
+                    })
+
+                # Criar campo referenciando o domínio
+                ET.SubElement(secao_elementos, "elemento", {
+                    "gxsi:type": campo["tipo"],
+                    "titulo": campo["titulo"],
+                    "dominio": chave,
+                    "colunas": "2" if campo["tipo"] == "grupoRadio" else "1",
+                    "obrigatorio": str(campo["obrigatorio"]).lower()
+                }).append(ET.Element("conteudo", {"gxsi:type": "valor"}))
+
+            else:
+                atributos = {
+                    "gxsi:type": campo["tipo"],
+                    "titulo": campo["titulo"],
+                    "obrigatorio": str(campo["obrigatorio"]).lower(),
+                    "largura": str(campo["largura"])
+                }
+                if campo["altura"]:
+                    atributos["altura"] = str(campo["altura"])
+                el = ET.SubElement(secao_elementos, "elemento", atributos)
+                ET.SubElement(el, "conteudo", {"gxsi:type": "valor"})
+
+    return ET.tostring(root, encoding="unicode")
+
+# =========================
+# Interface Streamlit
+# =========================
 if "formulario" not in st.session_state:
     st.session_state.formulario = {
         "nome": "",
@@ -36,9 +116,9 @@ for i, secao in enumerate(st.session_state.formulario["secoes"]):
     with st.expander(f"➕ Adicionar Campo em {secao['titulo']}"):
         tipo = st.selectbox("Tipo de Campo", ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"])
         titulo = st.text_input("Título do Campo (se aplicável)")
-        obrigatorio = st.checkbox("Obrigatório?", value=False)
+        obrigatorio = st.checkbox("Obrigatório?", value=False) if tipo != "paragrafo" else False
         largura = st.number_input("Largura", value=450)
-        altura = st.number_input("Altura (para texto-area)", value=100) if tipo == "texto-area" else None
+        altura = st.number_input("Altura", value=100) if tipo == "texto-area" else None
 
         dominios = []
         if tipo in ["grupoRadio", "grupoCheck"]:
@@ -87,3 +167,10 @@ if st.session_state.formulario["secoes"]:
                     st.checkbox(opt)
 else:
     st.info("Nenhuma seção adicionada ainda.")
+
+st.divider()
+st.subheader("⬇️ Exportar para XML")
+
+if st.button("Gerar XML"):
+    xml_str = gerar_xml(st.session_state.formulario)
+    st.code(xml_str, language="xml")
