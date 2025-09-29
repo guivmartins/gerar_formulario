@@ -2,50 +2,41 @@ import streamlit as st
 import xml.etree.ElementTree as ET
 import re
 
-# ===============================
+# ==========================
 # Funções auxiliares
-# ===============================
+# ==========================
 
-def gerar_chave(titulo, usadas):
-    """Gera chave única para domínio baseado no título (máx 20 chars)."""
-    base = re.sub(r'\W+', '', titulo)[:20]
-    chave = base
-    contador = 1
-    while chave in usadas:
-        chave = f"{base}{contador}"
-        contador += 1
-    usadas.add(chave)
-    return chave
-
-def criar_elemento(tag, atributos=None, conteudo=None):
-    """Cria elemento XML com atributos e conteúdo opcional."""
+def criar_elemento(tag, atributos=None, texto=None):
     elem = ET.Element(tag)
     if atributos:
         for k, v in atributos.items():
-            elem.set(k, str(v))
-    if conteudo is not None:
-        elem.text = conteudo
+            elem.set(k, v)
+    if texto:
+        elem.text = texto
     return elem
 
-def gerar_xml(formulario):
-    """Gera XML GXSI a partir do dicionário do formulário."""
-    ns = {"gxsi": "http://www.w3.org/2001/XMLSchema-instance"}
-    ET.register_namespace("gxsi", ns["gxsi"])
+def gerar_chave(titulo, chaves_usadas):
+    chave_base = re.sub(r'\W+', '', titulo.strip().lower())[:20]
+    chave = chave_base
+    contador = 1
+    while chave in chaves_usadas:
+        chave = f"{chave_base}{contador}"
+        contador += 1
+    chaves_usadas.add(chave)
+    return chave
 
+def gerar_xml(formulario_nome, formulario_versao, secoes):
     root = criar_elemento("gxsi:formulario", {
-        "xmlns:gxsi": ns["gxsi"],
-        "nome": formulario["nome"],
-        "versao": formulario["versao"]
+        "xmlns:gxsi": "http://www.w3.org/2001/XMLSchema-instance",
+        "nome": formulario_nome,
+        "versao": formulario_versao
     })
 
     elementos_root = criar_elemento("elementos")
-    root.append(elementos_root)
-
-    # armazenar chaves de domínios
-    chaves_usadas = set()
     dominios_root = criar_elemento("dominios")
+    chaves_usadas = set()
 
-    for secao in formulario["secoes"]:
+    for secao in secoes:
         secao_elem = criar_elemento("elemento", {
             "gxsi:type": "seccao",
             "titulo": secao["titulo"],
@@ -55,108 +46,113 @@ def gerar_xml(formulario):
         elementos_secao = criar_elemento("elementos")
 
         for campo in secao["campos"]:
-            atributos = {
-                "gxsi:type": campo["tipo"],
-                "titulo": campo["titulo"],
-                "obrigatorio": str(campo["obrigatorio"]).lower(),
-                "largura": str(campo["largura"])
-            }
+            if campo["tipo"] == "paragrafo":
+                # Caso especial: não tem título/obrigatório, mas tem valor
+                atributos = {
+                    "gxsi:type": "paragrafo",
+                    "valor": campo["titulo"],  # usa o texto digitado
+                    "largura": str(campo["largura"])
+                }
+                campo_elem = criar_elemento("elemento", atributos)
 
-            if campo["altura"]:
-                atributos["altura"] = str(campo["altura"])
-            if campo["tamanhoMaximo"]:
-                atributos["tamanhoMaximo"] = str(campo["tamanhoMaximo"])
+            else:
+                atributos = {
+                    "gxsi:type": campo["tipo"],
+                    "titulo": campo["titulo"],
+                    "obrigatorio": str(campo["obrigatorio"]).lower(),
+                    "largura": str(campo["largura"])
+                }
+                if campo["altura"]:
+                    atributos["altura"] = str(campo["altura"])
+                if campo["tamanhoMaximo"]:
+                    atributos["tamanhoMaximo"] = str(campo["tamanhoMaximo"])
 
-            campo_elem = criar_elemento("elemento", atributos)
-            conteudo_elem = criar_elemento("conteudo", {"gxsi:type": "valor"})
-            campo_elem.append(conteudo_elem)
+                campo_elem = criar_elemento("elemento", atributos)
+                conteudo_elem = criar_elemento("conteudo", {"gxsi:type": "valor"})
+                campo_elem.append(conteudo_elem)
 
-            # grupoRadio e grupoCheck -> associar domínio
-            if campo["tipo"] in ["grupoRadio", "grupoCheck"] and campo["dominios"]:
-                chave = gerar_chave(campo["titulo"], chaves_usadas)
-                campo_elem.set("dominio", chave)
+                # Domínios
+                if campo["tipo"] in ["grupoRadio", "grupoCheck"] and campo["dominios"]:
+                    chave = gerar_chave(campo["titulo"], chaves_usadas)
+                    campo_elem.set("dominio", chave)
 
-                dominio_elem = criar_elemento("dominio", {"chave": chave})
-                for valor in campo["dominios"]:
-                    valor_elem = criar_elemento("valor", None, valor)
-                    dominio_elem.append(valor_elem)
-                dominios_root.append(dominio_elem)
+                    dominio_elem = criar_elemento("dominio", {
+                        "gxsi:type": "dominioEstatico",
+                        "chave": chave
+                    })
+
+                    for valor in campo["dominios"]:
+                        valor_formatado = re.sub(r'\W+', '_', valor.strip().upper())
+                        item_elem = criar_elemento("item", {
+                            "gxsi:type": "dominioItemValor",
+                            "descricao": valor.strip(),
+                            "valor": valor_formatado
+                        })
+                        dominio_elem.append(item_elem)
+
+                    dominios_root.append(dominio_elem)
 
             elementos_secao.append(campo_elem)
 
         secao_elem.append(elementos_secao)
         elementos_root.append(secao_elem)
 
-    # adicionar dominios apenas se existirem
+    root.append(elementos_root)
     if list(dominios_root):
         root.append(dominios_root)
 
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8")
+    return ET.tostring(root, encoding="unicode")
 
-# ===============================
+# ==========================
 # Interface Streamlit
-# ===============================
+# ==========================
 
-st.title("📝 Construtor de Formulários GXSI")
+st.title("Gerador de Formulários GXSI XML")
 
-# Dados do formulário
-st.subheader("📄 Informações do Formulário")
-form_nome = st.text_input("Nome do Formulário", "Formulário Teste")
-form_versao = st.text_input("Versão", "1.0")
+formulario_nome = st.text_input("Nome do Formulário")
+formulario_versao = st.text_input("Versão", "1.0")
 
-if "formulario" not in st.session_state:
-    st.session_state.formulario = {
-        "nome": form_nome,
-        "versao": form_versao,
-        "secoes": []
-    }
+secoes = []
+num_secoes = st.number_input("Quantas seções deseja adicionar?", min_value=1, max_value=20, value=1)
 
-# Adicionar seções
-st.subheader("➕ Adicionar Seções")
-secao_titulo = st.text_input("Título da Seção")
-if st.button("Adicionar Seção") and secao_titulo:
-    st.session_state.formulario["secoes"].append({"titulo": secao_titulo, "campos": []})
+for i in range(num_secoes):
+    st.subheader(f"Seção {i+1}")
+    secao_titulo = st.text_input(f"Título da Seção {i+1}", key=f"secao_titulo_{i}")
+    campos = []
+    num_campos = st.number_input(f"Quantos campos na seção {i+1}?", min_value=1, max_value=20, value=1, key=f"num_campos_{i}")
 
-# Listar seções e campos
-for i, secao in enumerate(st.session_state.formulario["secoes"]):
-    st.markdown(f"### 📌 Seção: {secao['titulo']}")
-
-    # Adicionar campos
-    with st.expander("➕ Adicionar Campo"):
-        campo_titulo = st.text_input(f"Título do Campo (Seção {i+1})", key=f"titulo_{i}")
-        campo_tipo = st.selectbox(
-            "Tipo do Campo",
-            ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"],
-            key=f"tipo_{i}"
-        )
-        obrigatorio = st.checkbox("Obrigatório", value=False, key=f"obrigatorio_{i}")
-        largura = st.number_input("Largura", value=450, key=f"largura_{i}")
-        altura = st.number_input("Altura (se aplicável)", value=0, key=f"altura_{i}")
-        tamanho_max = st.number_input("Tamanho Máximo (se aplicável)", value=0, key=f"tamanho_{i}")
+    for j in range(num_campos):
+        st.markdown(f"**Campo {j+1}**")
+        tipo = st.selectbox("Tipo", ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"],
+                            key=f"tipo_{i}_{j}")
+        titulo = st.text_input("Título", key=f"titulo_{i}_{j}")
+        obrigatorio = st.checkbox("Obrigatório", value=False, key=f"obrigatorio_{i}_{j}")
+        largura = st.number_input("Largura", min_value=100, max_value=1000, value=300, key=f"largura_{i}_{j}")
+        altura = st.number_input("Altura", min_value=0, max_value=1000, value=0, key=f"altura_{i}_{j}")
+        tamanhoMaximo = st.number_input("Tamanho Máximo", min_value=0, max_value=500, value=0, key=f"tamanhoMaximo_{i}_{j}")
 
         dominios = []
-        if campo_tipo in ["grupoRadio", "grupoCheck"]:
-            dominios = st.text_area("Domínios (um por linha)", key=f"dominios_{i}")
-            dominios = [d.strip() for d in dominios.split("\n") if d.strip()]
+        if tipo in ["grupoRadio", "grupoCheck"]:
+            num_dominios = st.number_input("Quantos itens no domínio?", min_value=1, max_value=20, value=2, key=f"num_dominios_{i}_{j}")
+            for d in range(num_dominios):
+                valor_dom = st.text_input(f"Item {d+1}", key=f"dominio_{i}_{j}_{d}")
+                dominios.append(valor_dom)
 
-        if st.button("Salvar Campo", key=f"salvar_{i}") and campo_titulo:
-            secao["campos"].append({
-                "titulo": campo_titulo,
-                "tipo": campo_tipo,
-                "obrigatorio": obrigatorio,
-                "largura": largura,
-                "altura": altura if altura > 0 else None,
-                "tamanhoMaximo": tamanho_max if tamanho_max > 0 else None,
-                "dominios": dominios
-            })
+        campos.append({
+            "tipo": tipo,
+            "titulo": titulo,
+            "obrigatorio": obrigatorio,
+            "largura": largura,
+            "altura": altura,
+            "tamanhoMaximo": tamanhoMaximo,
+            "dominios": dominios
+        })
 
-    # Listar campos já adicionados
-    for campo in secao["campos"]:
-        st.write(f"- {campo['titulo']} ({campo['tipo']})")
+    secoes.append({
+        "titulo": secao_titulo,
+        "campos": campos
+    })
 
-# Exportar XML
-if st.button("📤 Gerar XML"):
-    st.session_state.formulario["nome"] = form_nome
-    st.session_state.formulario["versao"] = form_versao
-    xml_saida = gerar_xml(st.session_state.formulario)
-    st.code(xml_saida, language="xml")
+if st.button("Gerar XML"):
+    xml_output = gerar_xml(formulario_nome, formulario_versao, secoes)
+    st.code(xml_output, language="xml")
