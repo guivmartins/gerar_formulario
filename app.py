@@ -1,158 +1,116 @@
 import streamlit as st
-import xml.etree.ElementTree as ET
-import re
 
-# ==========================
-# Funções auxiliares
-# ==========================
+# ==============================
+# Inicialização do estado
+# ==============================
+if "formulario" not in st.session_state:
+    st.session_state.formulario = {
+        "nome": "",
+        "versao": "",
+        "secoes": []
+    }
 
-def criar_elemento(tag, atributos=None, texto=None):
-    elem = ET.Element(tag)
-    if atributos:
-        for k, v in atributos.items():
-            elem.set(k, v)
-    if texto:
-        elem.text = texto
-    return elem
-
-def gerar_chave(titulo, chaves_usadas):
-    chave_base = re.sub(r'\W+', '', titulo.strip().lower())[:20]
-    chave = chave_base
-    contador = 1
-    while chave in chaves_usadas:
-        chave = f"{chave_base}{contador}"
-        contador += 1
-    chaves_usadas.add(chave)
-    return chave
-
-def gerar_xml(formulario_nome, formulario_versao, secoes):
-    root = criar_elemento("gxsi:formulario", {
-        "xmlns:gxsi": "http://www.w3.org/2001/XMLSchema-instance",
-        "nome": formulario_nome,
-        "versao": formulario_versao
+# Funções utilitárias
+def adicionar_secao(titulo):
+    st.session_state.formulario["secoes"].append({
+        "titulo": titulo,
+        "campos": []
     })
 
-    elementos_root = criar_elemento("elementos")
-    dominios_root = criar_elemento("dominios")
-    chaves_usadas = set()
+def adicionar_campo(secao_idx, campo):
+    st.session_state.formulario["secoes"][secao_idx]["campos"].append(campo)
 
-    for secao in secoes:
-        secao_elem = criar_elemento("elemento", {
-            "gxsi:type": "seccao",
-            "titulo": secao["titulo"],
-            "largura": "500"
-        })
+# ==============================
+# Layout
+# ==============================
+st.title("📝 Construtor de Formulários GXSI")
 
-        elementos_secao = criar_elemento("elementos")
+# Nome e versão do formulário
+st.session_state.formulario["nome"] = st.text_input("Nome do Formulário", st.session_state.formulario["nome"])
+st.session_state.formulario["versao"] = st.text_input("Versão", st.session_state.formulario["versao"])
 
+st.divider()
+
+# Adicionar nova seção
+with st.expander("➕ Adicionar Seção"):
+    titulo_secao = st.text_input("Título da Seção", key="titulo_secao")
+    if st.button("Adicionar Seção"):
+        if titulo_secao.strip():
+            adicionar_secao(titulo_secao.strip())
+            st.success(f"Seção '{titulo_secao}' adicionada com sucesso!")
+            st.session_state.titulo_secao = ""  # limpa campo
+
+# Mostrar as seções existentes
+for i, secao in enumerate(st.session_state.formulario["secoes"]):
+    with st.expander(f"📂 {secao['titulo']}"):
+        st.markdown(f"**Seção {i+1}: {secao['titulo']}**")
+
+        # Adicionar campos nesta seção
+        with st.form(key=f"form_add_campo_{i}"):
+            tipo = st.selectbox("Tipo do Campo", ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"], key=f"tipo_{i}")
+            titulo = st.text_input("Título do Campo", key=f"titulo_{i}")
+            obrigatorio = st.checkbox("Obrigatório", key=f"obrigatorio_{i}")
+            largura = st.number_input("Largura", min_value=100, max_value=1000, value=300, step=10, key=f"largura_{i}")
+            altura = st.number_input("Altura", min_value=50, max_value=1000, value=100, step=10, key=f"altura_{i}")
+            tamanho_maximo = st.number_input("Tamanho Máximo (opcional)", min_value=0, value=0, step=1, key=f"tammax_{i}")
+
+            dominios = []
+            if tipo in ["grupoRadio", "grupoCheck"]:
+                qtd_dom = st.number_input("Quantos domínios?", min_value=1, max_value=20, value=2, key=f"qtd_dom_{i}")
+                for d in range(qtd_dom):
+                    desc = st.text_input(f"Descrição Domínio {d+1}", key=f"desc_{i}_{d}")
+                    val = st.text_input(f"Valor Domínio {d+1}", key=f"val_{i}_{d}")
+                    if desc and val:
+                        dominios.append({"descricao": desc, "valor": val})
+
+            submit_campo = st.form_submit_button("Adicionar Campo")
+            if submit_campo:
+                novo_campo = {
+                    "tipo": tipo,
+                    "titulo": titulo,
+                    "obrigatorio": obrigatorio,
+                    "largura": largura,
+                    "altura": altura,
+                    "tamanhoMaximo": tamanho_maximo if tamanho_maximo > 0 else None,
+                    "dominios": dominios
+                }
+                adicionar_campo(i, novo_campo)
+                st.success(f"Campo '{titulo}' adicionado à seção '{secao['titulo']}'")
+
+        # Listar os campos da seção
+        if secao["campos"]:
+            st.write("📑 Campos desta seção:")
+            for campo in secao["campos"]:
+                st.markdown(f"- **{campo['titulo']}** ({campo['tipo']})")
+
+# ==============================
+# Pré-visualização dinâmica
+# ==============================
+st.divider()
+st.subheader("👀 Pré-visualização do Formulário")
+
+if st.session_state.formulario["secoes"]:
+    st.markdown(f"## {st.session_state.formulario['nome']} (v{st.session_state.formulario['versao']})")
+    for secao in st.session_state.formulario["secoes"]:
+        st.markdown(f"### 📂 {secao['titulo']}")
         for campo in secao["campos"]:
-            if campo["tipo"] == "paragrafo":
-                # Caso especial: não tem título/obrigatório, mas tem valor
-                atributos = {
-                    "gxsi:type": "paragrafo",
-                    "valor": campo["titulo"],  # usa o texto digitado
-                    "largura": str(campo["largura"])
-                }
-                campo_elem = criar_elemento("elemento", atributos)
+            if campo["tipo"] == "texto":
+                st.text_input(campo["titulo"], placeholder="Digite aqui...", key=f"pv_{campo['titulo']}")
+            elif campo["tipo"] == "texto-area":
+                st.text_area(campo["titulo"], placeholder="Digite aqui...", height=campo["altura"], key=f"pv_{campo['titulo']}")
+            elif campo["tipo"] == "paragrafo":
+                st.markdown(campo["titulo"])
+            elif campo["tipo"] == "grupoRadio":
+                opcoes = [item["descricao"] for item in campo["dominios"]]
+                st.radio(campo["titulo"], opcoes, key=f"pv_{campo['titulo']}")
+            elif campo["tipo"] == "grupoCheck":
+                opcoes = [item["descricao"] for item in campo["dominios"]]
+                for opt in opcoes:
+                    st.checkbox(opt, key=f"pv_{campo['titulo']}_{opt}")
+else:
+    st.info("Nenhuma seção adicionada ainda.")
 
-            else:
-                atributos = {
-                    "gxsi:type": campo["tipo"],
-                    "titulo": campo["titulo"],
-                    "obrigatorio": str(campo["obrigatorio"]).lower(),
-                    "largura": str(campo["largura"])
-                }
-                if campo["altura"]:
-                    atributos["altura"] = str(campo["altura"])
-                if campo["tamanhoMaximo"]:
-                    atributos["tamanhoMaximo"] = str(campo["tamanhoMaximo"])
-
-                campo_elem = criar_elemento("elemento", atributos)
-                conteudo_elem = criar_elemento("conteudo", {"gxsi:type": "valor"})
-                campo_elem.append(conteudo_elem)
-
-                # Domínios
-                if campo["tipo"] in ["grupoRadio", "grupoCheck"] and campo["dominios"]:
-                    chave = gerar_chave(campo["titulo"], chaves_usadas)
-                    campo_elem.set("dominio", chave)
-
-                    dominio_elem = criar_elemento("dominio", {
-                        "gxsi:type": "dominioEstatico",
-                        "chave": chave
-                    })
-
-                    for valor in campo["dominios"]:
-                        valor_formatado = re.sub(r'\W+', '_', valor.strip().upper())
-                        item_elem = criar_elemento("item", {
-                            "gxsi:type": "dominioItemValor",
-                            "descricao": valor.strip(),
-                            "valor": valor_formatado
-                        })
-                        dominio_elem.append(item_elem)
-
-                    dominios_root.append(dominio_elem)
-
-            elementos_secao.append(campo_elem)
-
-        secao_elem.append(elementos_secao)
-        elementos_root.append(secao_elem)
-
-    root.append(elementos_root)
-    if list(dominios_root):
-        root.append(dominios_root)
-
-    return ET.tostring(root, encoding="unicode")
-
-# ==========================
-# Interface Streamlit
-# ==========================
-
-st.title("Gerador de Formulários GXSI XML")
-
-formulario_nome = st.text_input("Nome do Formulário")
-formulario_versao = st.text_input("Versão", "1.0")
-
-secoes = []
-num_secoes = st.number_input("Quantas seções deseja adicionar?", min_value=1, max_value=20, value=1)
-
-for i in range(num_secoes):
-    st.subheader(f"Seção {i+1}")
-    secao_titulo = st.text_input(f"Título da Seção {i+1}", key=f"secao_titulo_{i}")
-    campos = []
-    num_campos = st.number_input(f"Quantos campos na seção {i+1}?", min_value=1, max_value=20, value=1, key=f"num_campos_{i}")
-
-    for j in range(num_campos):
-        st.markdown(f"**Campo {j+1}**")
-        tipo = st.selectbox("Tipo", ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"],
-                            key=f"tipo_{i}_{j}")
-        titulo = st.text_input("Título", key=f"titulo_{i}_{j}")
-        obrigatorio = st.checkbox("Obrigatório", value=False, key=f"obrigatorio_{i}_{j}")
-        largura = st.number_input("Largura", min_value=100, max_value=1000, value=300, key=f"largura_{i}_{j}")
-        altura = st.number_input("Altura", min_value=0, max_value=1000, value=0, key=f"altura_{i}_{j}")
-        tamanhoMaximo = st.number_input("Tamanho Máximo", min_value=0, max_value=500, value=0, key=f"tamanhoMaximo_{i}_{j}")
-
-        dominios = []
-        if tipo in ["grupoRadio", "grupoCheck"]:
-            num_dominios = st.number_input("Quantos itens no domínio?", min_value=1, max_value=20, value=2, key=f"num_dominios_{i}_{j}")
-            for d in range(num_dominios):
-                valor_dom = st.text_input(f"Item {d+1}", key=f"dominio_{i}_{j}_{d}")
-                dominios.append(valor_dom)
-
-        campos.append({
-            "tipo": tipo,
-            "titulo": titulo,
-            "obrigatorio": obrigatorio,
-            "largura": largura,
-            "altura": altura,
-            "tamanhoMaximo": tamanhoMaximo,
-            "dominios": dominios
-        })
-
-    secoes.append({
-        "titulo": secao_titulo,
-        "campos": campos
-    })
-
-if st.button("Gerar XML"):
-    xml_output = gerar_xml(formulario_nome, formulario_versao, secoes)
-    st.code(xml_output, language="xml")
+# Debug JSON
+st.divider()
+st.subheader("📋 Estrutura Atual do Formulário (JSON)")
+st.json(st.session_state.formulario)
