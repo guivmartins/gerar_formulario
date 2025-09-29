@@ -1,7 +1,7 @@
 import streamlit as st
 import xml.etree.ElementTree as ET
 
-st.set_page_config(page_title="Construtor de Formulários", layout="wide")
+st.set_page_config(page_title="Construtor de Formulários", layout="centered")
 
 # Estado inicial
 if "formulario" not in st.session_state:
@@ -14,77 +14,83 @@ if "formulario" not in st.session_state:
 
 st.title("Construtor de Formulários")
 
-# Nome e versão
-st.session_state.formulario["nome"] = st.text_input("Nome do formulário", value=st.session_state.formulario["nome"])
-st.session_state.formulario["versao"] = st.text_input("Versão", value=st.session_state.formulario["versao"])
+with st.container():
+    # Nome e versão
+    st.session_state.formulario["nome"] = st.text_input("Nome do formulário", value=st.session_state.formulario["nome"])
+    st.session_state.formulario["versao"] = st.text_input("Versão", value=st.session_state.formulario["versao"])
 
-st.divider()
-st.subheader("Adicionar Seções")
-
-# Criar nova seção
-with st.expander("➕ Nova Seção"):
-    titulo_secao = st.text_input("Título da Seção")
-    largura_secao = st.number_input("Largura da Seção", value=500, step=10)
-    if st.button("Adicionar Seção"):
-        if titulo_secao:
-            st.session_state.formulario["secoes"].append({
-                "titulo": titulo_secao,
-                "largura": largura_secao,
-                "campos": []
-            })
-
-# Selecionar seção para adicionar campos
-if st.session_state.formulario["secoes"]:
     st.divider()
-    st.subheader("Adicionar Campos")
-    secao_idx = st.selectbox("Selecione a seção", range(len(st.session_state.formulario["secoes"])),
-                             format_func=lambda i: st.session_state.formulario["secoes"][i]["titulo"])
+    st.subheader("Adicionar Seções")
 
-    with st.expander("➕ Novo Campo"):
-        tipo = st.selectbox("Tipo do campo", ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"])
-        largura = st.number_input("Largura do campo", value=450, step=10)
-        altura = None
-        obrigatorio = False
-        titulo = ""
-        colunas = 1
-        dominios = []
+    # Criar nova seção
+    with st.expander("➕ Nova Seção"):
+        titulo_secao = st.text_input("Título da Seção")
+        largura_secao = st.number_input("Largura da Seção", value=500, step=10)
+        if st.button("Adicionar Seção"):
+            if titulo_secao:
+                st.session_state.formulario["secoes"].append({
+                    "titulo": titulo_secao,
+                    "largura": largura_secao,
+                    "campos": []
+                })
 
-        if tipo != "paragrafo":
-            titulo = st.text_input("Título do campo")
-            obrigatorio = st.checkbox("Obrigatório?", value=False)
+    # Selecionar seção para adicionar campos
+    if st.session_state.formulario["secoes"]:
+        st.divider()
+        st.subheader("Adicionar Campos")
+        secao_idx = st.selectbox("Selecione a seção", range(len(st.session_state.formulario["secoes"])),
+                                 format_func=lambda i: st.session_state.formulario["secoes"][i]["titulo"])
 
-        if tipo == "texto-area":
-            altura = st.number_input("Altura do campo", value=100, step=10)
-
-        if tipo in ["grupoRadio", "grupoCheck"]:
-            colunas = st.number_input("Quantidade de colunas", min_value=1, max_value=5, value=1)
-            qtd_itens = st.number_input("Quantidade de opções", min_value=1, value=2)
+        with st.expander("➕ Novo Campo"):
+            tipo = st.selectbox("Tipo do campo", ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"])
+            largura = st.number_input("Largura do campo", value=450, step=10)
+            altura = None
+            obrigatorio = False
+            titulo = ""
+            valor_paragrafo = ""
+            colunas = 1
             dominios = []
-            for i in range(qtd_itens):
-                descricao = st.text_input(f"Descrição da opção {i+1}")
-                if descricao:
-                    valor = descricao.upper().replace(" ", "_")
-                    dominios.append({"descricao": descricao, "valor": valor})
 
-        if st.button("Adicionar Campo"):
-            campo = {
-                "tipo": tipo,
-                "largura": largura,
-            }
             if tipo != "paragrafo":
-                campo["titulo"] = titulo
-                campo["obrigatorio"] = obrigatorio
-            if tipo == "texto-area":
-                campo["altura"] = altura
-            if tipo in ["grupoRadio", "grupoCheck"]:
-                chave = titulo.replace(" ", "")[:20].upper()
-                if chave in st.session_state.formulario["dominios"]:
-                    chave += "1"
-                st.session_state.formulario["dominios"][chave] = dominios
-                campo["colunas"] = colunas
-                campo["dominio"] = chave
+                titulo = st.text_input("Título do campo")
+                obrigatorio = st.checkbox("Obrigatório?", value=False)
+            else:
+                valor_paragrafo = st.text_area("Valor do parágrafo")
 
-            st.session_state.formulario["secoes"][secao_idx]["campos"].append(campo)
+            if tipo == "texto-area":
+                altura = st.number_input("Altura do campo", value=100, step=10)
+
+            if tipo in ["grupoRadio", "grupoCheck"]:
+                colunas = st.number_input("Quantidade de colunas", min_value=1, max_value=5, value=1)
+                qtd_itens = st.number_input("Quantidade de opções", min_value=1, value=2)
+                dominios = []
+                for i in range(qtd_itens):
+                    descricao = st.text_input(f"Descrição da opção {i+1}")
+                    if descricao:
+                        valor = descricao.upper().replace(" ", "_")
+                        dominios.append({"descricao": descricao, "valor": valor})
+
+            if st.button("Adicionar Campo"):
+                campo = {
+                    "tipo": tipo,
+                    "largura": largura,
+                }
+                if tipo != "paragrafo":
+                    campo["titulo"] = titulo
+                    campo["obrigatorio"] = obrigatorio
+                else:
+                    campo["valor"] = valor_paragrafo
+                if tipo == "texto-area":
+                    campo["altura"] = altura
+                if tipo in ["grupoRadio", "grupoCheck"]:
+                    chave = titulo.replace(" ", "")[:20].upper()
+                    if chave in st.session_state.formulario["dominios"]:
+                        chave += "1"
+                    st.session_state.formulario["dominios"][chave] = dominios
+                    campo["colunas"] = colunas
+                    campo["dominio"] = chave
+
+                st.session_state.formulario["secoes"][secao_idx]["campos"].append(campo)
 
 # -------- Gerar XML --------
 def gerar_xml():
@@ -111,7 +117,7 @@ def gerar_xml():
                     "largura": str(campo["largura"])
                 })
                 conteudo = ET.SubElement(el, "conteudo", {"gxsi:type": "valor"})
-                conteudo.text = campo.get("titulo", "")
+                conteudo.text = campo.get("valor", "")
             elif campo["tipo"] in ["grupoRadio", "grupoCheck"]:
                 el = ET.SubElement(els, "elemento", {
                     "gxsi:type": campo["tipo"],
@@ -163,11 +169,12 @@ if st.session_state.formulario["secoes"]:
             elif campo["tipo"] == "texto-area":
                 st.text_area(campo["titulo"], placeholder="Digite aqui...", height=campo["altura"])
             elif campo["tipo"] == "paragrafo":
-                st.markdown(campo["titulo"])
+                st.markdown(campo["valor"])
             elif campo["tipo"] == "grupoRadio":
                 opcoes = [item["descricao"] for item in st.session_state.formulario["dominios"][campo["dominio"]]]
                 st.radio(campo["titulo"], opcoes, horizontal=True)
             elif campo["tipo"] == "grupoCheck":
+                st.markdown(f"**{campo['titulo']}**")
                 opcoes = [item["descricao"] for item in st.session_state.formulario["dominios"][campo["dominio"]]]
                 for opt in opcoes:
                     st.checkbox(opt)
