@@ -37,13 +37,14 @@ st.divider()
 
 # Adicionar nova seção
 with st.expander("➕ Adicionar Seção"):
-    new_titulo_secao = st.text_input("Título da Seção", key="new_titulo_secao")
+    new_titulo_secao = st.text_input("Título da Seção", key="input_secao")
     if st.button("Adicionar Seção"):
         if new_titulo_secao.strip():
             adicionar_secao(new_titulo_secao.strip())
             st.success(f"Seção '{new_titulo_secao}' adicionada com sucesso!")
-            # resetar campo após adicionar
-            st.session_state["new_titulo_secao"] = ""
+            # Resetar campo e forçar rerun para limpar
+            st.session_state["input_secao"] = ""
+            st.rerun()
 
 # Mostrar as seções existentes
 for i, secao in enumerate(st.session_state.formulario["secoes"]):
