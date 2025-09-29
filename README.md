@@ -1,13 +1,14 @@
-# ?? Gerador de Formulários
+# Gerador de FormulÃ¡rios
 
-Este projeto é uma aplicação web simples em **Python + Streamlit** para montagem e exportação de formulários **GXSI XML**.  
-Você pode rodar localmente ou publicar diretamente no **Render** para uso via navegador.  
+Este projeto Ã© uma aplicaÃ§Ã£o web simples em **Python + Streamlit** para montagem e exportaÃ§Ã£o de formulÃ¡rios **GXSI XML**.  
+VocÃª pode rodar localmente ou publicar diretamente no **Render** para uso via navegador.  
 
 ---
 
-## ?? Como rodar localmente
+## Como rodar localmente
 
-### 1. Clonar o repositório
+### 1. Clonar o repositÃ³rio
 ```bash
 git clone https://github.com/seu-usuario/formulario-gxsi.git
 cd formulario-gxsi
+
