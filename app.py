@@ -1,190 +1,197 @@
 import streamlit as st
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
+import unicodedata
+import re
 
-st.set_page_config(page_title="Construtor de Formulários", layout="centered")
-
-# ===============================
-# Sessão de estado
-# ===============================
-if "form_name" not in st.session_state:
-    st.session_state.form_name = ""
-if "form_version" not in st.session_state:
-    st.session_state.form_version = ""
-if "sections" not in st.session_state:
-    st.session_state.sections = []
-if "domains" not in st.session_state:
-    st.session_state.domains = {}
-
-# ===============================
+# =========================================
 # Funções auxiliares
-# ===============================
-def generate_key(base, existing_keys):
-    key = base[:20].replace(" ", "").replace("ç", "c").replace("ã", "a").replace("õ", "o")
-    candidate = key
-    i = 1
-    while candidate in existing_keys:
-        candidate = f"{key}{i}"
-        i += 1
-    return candidate
+# =========================================
+def normalizar_chave(titulo):
+    """Normaliza string para gerar chave de domínio sem acentos e espaços."""
+    chave = unicodedata.normalize("NFKD", titulo).encode("ASCII", "ignore").decode("ASCII")
+    chave = re.sub(r"[^a-zA-Z0-9]", "", chave)
+    return chave[:20]
 
-def export_xml_gfe():
+def gerar_xml(formulario):
     root = ET.Element("gxsi:formulario", {
         "xmlns:gxsi": "http://www.w3.org/2001/XMLSchema-instance",
-        "nome": st.session_state.form_name,
-        "versao": st.session_state.form_version
+        "nome": formulario["nome"],
+        "versao": formulario["versao"]
     })
 
-    # Domínios
-    if st.session_state.domains:
+    # Criar blocos de dominios
+    if formulario["dominios"]:
         dominios_tag = ET.SubElement(root, "dominios")
-        for chave, itens in st.session_state.domains.items():
+        for chave, itens in formulario["dominios"].items():
             dominio_tag = ET.SubElement(dominios_tag, "dominio", {
                 "gxsi:type": "dominioEstatico",
                 "chave": chave
             })
             itens_tag = ET.SubElement(dominio_tag, "itens")
-            for desc, val in itens:
+            for item in itens:
                 ET.SubElement(itens_tag, "item", {
                     "gxsi:type": "dominioItemValor",
-                    "descricao": desc,
-                    "valor": val
+                    "descricao": item["descricao"],
+                    "valor": item["valor"]
                 })
 
-    # Elementos
+    # Criar blocos de elementos
     elementos_tag = ET.SubElement(root, "elementos")
-    for section in st.session_state.sections:
-        sec_tag = ET.SubElement(elementos_tag, "elemento", {
+    for secao in formulario["secoes"]:
+        secao_tag = ET.SubElement(elementos_tag, "elemento", {
             "gxsi:type": "seccao",
-            "titulo": section["titulo"],
-            "largura": str(section.get("largura", 800))
+            "titulo": secao["titulo"],
+            "largura": str(secao.get("largura", 500))
         })
-        elems_tag = ET.SubElement(sec_tag, "elementos")
+        elementos_secao = ET.SubElement(secao_tag, "elementos")
 
-        for field in section["campos"]:
-            if field["tipo"] == "paragrafo":
-                ET.SubElement(elems_tag, "elemento", {
+        for campo in secao["campos"]:
+            if campo["tipo"] == "paragrafo":
+                ET.SubElement(elementos_secao, "elemento", {
                     "gxsi:type": "paragrafo",
-                    "valor": field["valor"],
-                    "largura": str(field.get("largura", 450))
+                    "valor": campo["valor"],
+                    "largura": str(campo.get("largura", 450))
                 })
-            else:
-                attribs = {
-                    "gxsi:type": field["tipo"],
-                    "titulo": field["titulo"],
-                    "largura": str(field.get("largura", 450))
+            elif campo["tipo"] in ["grupoRadio", "grupoCheck"]:
+                elem_attrib = {
+                    "gxsi:type": campo["tipo"],
+                    "titulo": campo["titulo"],
+                    "dominio": campo["dominio"],
+                    "colunas": str(campo.get("colunas", 1)),
+                    "obrigatorio": str(campo["obrigatorio"]).lower()
                 }
-                if field["tipo"] in ["grupoRadio", "grupoCheck"]:
-                    attribs["dominio"] = field["dominio"]
-                    attribs["colunas"] = str(field.get("colunas", 1))
-                if "obrigatorio" in field:
-                    attribs["obrigatorio"] = str(field["obrigatorio"]).lower()
-                if "tamanhoMaximo" in field:
-                    attribs["tamanhoMaximo"] = str(field["tamanhoMaximo"])
-                if "altura" in field:
-                    attribs["altura"] = str(field["altura"])
-
-                el = ET.SubElement(elems_tag, "elemento", attribs)
-                ET.SubElement(el, "conteudo", {"gxsi:type": "valor"})
+                elemento_tag = ET.SubElement(elementos_secao, "elemento", elem_attrib)
+                ET.SubElement(elemento_tag, "conteudo", {"gxsi:type": "valor"})
+            elif campo["tipo"] == "texto-area":
+                elem_attrib = {
+                    "gxsi:type": "texto-area",
+                    "titulo": campo["titulo"],
+                    "obrigatorio": str(campo["obrigatorio"]).lower(),
+                    "largura": str(campo.get("largura", 450)),
+                    "altura": str(campo.get("altura", 100)),
+                    "maximo": str(campo.get("maximo", 0))
+                }
+                elemento_tag = ET.SubElement(elementos_secao, "elemento", elem_attrib)
+                ET.SubElement(elemento_tag, "conteudo", {"gxsi:type": "valor"})
+            else:  # texto
+                elem_attrib = {
+                    "gxsi:type": "texto",
+                    "titulo": campo["titulo"],
+                    "obrigatorio": str(campo["obrigatorio"]).lower(),
+                    "largura": str(campo.get("largura", 450)),
+                    "tamanhoMaximo": str(campo.get("maximo", 0))
+                }
+                elemento_tag = ET.SubElement(elementos_secao, "elemento", elem_attrib)
+                ET.SubElement(elemento_tag, "conteudo", {"gxsi:type": "valor"})
 
     xml_str = ET.tostring(root, encoding="utf-8")
-    pretty_xml = minidom.parseString(xml_str).toprettyxml(indent="   ", encoding="utf-8")
+    xml_pretty = minidom.parseString(xml_str).toprettyxml(indent="   ", encoding="utf-8")
+    return xml_pretty
 
-    return pretty_xml
-
-# ===============================
+# =========================================
 # Interface Streamlit
-# ===============================
+# =========================================
+st.set_page_config(page_title="Construtor de Formulários", layout="centered")
 st.title("Construtor de Formulários")
 
-st.subheader("Informações do Formulário")
-st.session_state.form_name = st.text_input("Nome do Formulário", st.session_state.form_name)
-st.session_state.form_version = st.text_input("Versão", st.session_state.form_version)
+if "formulario" not in st.session_state:
+    st.session_state.formulario = {
+        "nome": "",
+        "versao": "",
+        "secoes": [],
+        "dominios": {}
+    }
 
-# Gerenciar seções
+formulario = st.session_state.formulario
+
+# Nome e versão do formulário
+st.subheader("Configuração do Formulário")
+formulario["nome"] = st.text_input("Nome do formulário", formulario["nome"])
+formulario["versao"] = st.text_input("Versão", formulario["versao"], value="1.0")
+
+# Adicionar Seção
 st.subheader("Adicionar Seção")
-sec_title = st.text_input("Título da Seção")
-sec_width = st.number_input("Largura da Seção", value=800)
-if st.button("Adicionar Seção"):
-    st.session_state.sections.append({
-        "titulo": sec_title,
-        "largura": sec_width,
-        "campos": []
-    })
+secao_titulo = st.text_input("Título da seção")
+if st.button("Adicionar seção"):
+    if secao_titulo:
+        formulario["secoes"].append({"titulo": secao_titulo, "largura": 500, "campos": []})
 
-# Escolher seção para inserir campos
-if st.session_state.sections:
-    st.subheader("Adicionar Campos")
-    sec_names = [s["titulo"] for s in st.session_state.sections]
-    chosen_sec = st.selectbox("Selecione a Seção", sec_names)
-    current_section = next(s for s in st.session_state.sections if s["titulo"] == chosen_sec)
+# Listar seções
+for i, secao in enumerate(formulario["secoes"]):
+    st.markdown(f"### Seção: {secao['titulo']}")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        tipo = st.selectbox("Tipo do Campo", ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"])
-    with col2:
-        obrig = st.checkbox("Obrigatório", value=True, disabled=(tipo == "paragrafo"))
-
-    titulo = ""
-    valor = ""
-    if tipo == "paragrafo":
-        valor = st.text_area("Valor do Parágrafo")
-    else:
-        titulo = st.text_input("Título do Campo")
-
-    largura = st.number_input("Largura do Campo", value=450)
-    altura = None
-    if tipo == "texto-area":
-        altura = st.number_input("Altura do Campo", value=100)
-
-    tamanho_max = None
-    if tipo in ["texto", "texto-area"]:
-        tamanho_max = st.number_input("Tamanho Máximo", value=0)
-
-    dominio_key = None
-    colunas = 1
-    if tipo in ["grupoRadio", "grupoCheck"]:
-        colunas = st.number_input("Número de Colunas", value=1, min_value=1)
-        if titulo:
-            dominio_key = generate_key(titulo, st.session_state.domains.keys())
-            if dominio_key not in st.session_state.domains:
-                st.session_state.domains[dominio_key] = []
-            with st.expander(f"Gerenciar Domínio ({dominio_key})"):
-                desc = st.text_input("Descrição do item de domínio")
-                if st.button("Adicionar Item de Domínio"):
-                    st.session_state.domains[dominio_key].append((desc, desc))
-                st.write("Itens atuais:", st.session_state.domains[dominio_key])
-
-    if st.button("Adicionar Campo"):
-        campo = {"tipo": tipo, "largura": largura}
+    with st.expander("Adicionar campo"):
+        tipo = st.selectbox("Tipo de campo", ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"])
         if tipo == "paragrafo":
-            campo["valor"] = valor
+            valor = st.text_area("Valor do parágrafo")
+            largura = st.number_input("Largura", value=450)
+            if st.button(f"Adicionar parágrafo à {secao['titulo']}", key=f"p_{i}"):
+                secao["campos"].append({
+                    "tipo": "paragrafo",
+                    "valor": valor,
+                    "largura": largura
+                })
         else:
-            campo["titulo"] = titulo
-            campo["obrigatorio"] = obrig
-            if tamanho_max:
-                campo["tamanhoMaximo"] = tamanho_max
-            if altura:
-                campo["altura"] = altura
-            if dominio_key:
-                campo["dominio"] = dominio_key
-                campo["colunas"] = colunas
-        current_section["campos"].append(campo)
+            titulo = st.text_input("Título do campo", key=f"titulo_{i}_{tipo}")
+            obrigatorio = st.checkbox("Obrigatório", value=True, key=f"obrig_{i}_{tipo}")
+            largura = st.number_input("Largura", value=450, key=f"larg_{i}_{tipo}")
+
+            if tipo in ["grupoRadio", "grupoCheck"]:
+                colunas = st.number_input("Quantidade de colunas", min_value=1, max_value=5, value=2, key=f"col_{i}_{tipo}")
+                descricoes = st.text_area("Opções (uma por linha)", key=f"opts_{i}_{tipo}").splitlines()
+                if st.button(f"Adicionar {tipo} à {secao['titulo']}", key=f"btn_{i}_{tipo}"):
+                    chave = normalizar_chave(titulo)
+                    if chave in formulario["dominios"]:
+                        chave += "1"
+                    itens = [{"descricao": d, "valor": normalizar_chave(d)} for d in descricoes if d]
+                    formulario["dominios"][chave] = itens
+                    secao["campos"].append({
+                        "tipo": tipo,
+                        "titulo": titulo,
+                        "obrigatorio": obrigatorio,
+                        "dominio": chave,
+                        "colunas": colunas
+                    })
+            elif tipo == "texto-area":
+                altura = st.number_input("Altura", value=100, key=f"alt_{i}")
+                maximo = st.number_input("Tamanho máximo", value=0, key=f"max_{i}")
+                if st.button(f"Adicionar texto-area à {secao['titulo']}", key=f"btn_{i}_{tipo}"):
+                    secao["campos"].append({
+                        "tipo": "texto-area",
+                        "titulo": titulo,
+                        "obrigatorio": obrigatorio,
+                        "largura": largura,
+                        "altura": altura,
+                        "maximo": maximo
+                    })
+            else:  # texto
+                maximo = st.number_input("Tamanho máximo", value=0, key=f"max_{i}_{tipo}")
+                if st.button(f"Adicionar texto à {secao['titulo']}", key=f"btn_{i}_{tipo}"):
+                    secao["campos"].append({
+                        "tipo": "texto",
+                        "titulo": titulo,
+                        "obrigatorio": obrigatorio,
+                        "largura": largura,
+                        "maximo": maximo
+                    })
 
 # Pré-visualização
-if st.session_state.sections:
-    st.subheader("Pré-visualização do Formulário")
-    st.write(f"📄 **{st.session_state.form_name}** (versão {st.session_state.form_version})")
-    for sec in st.session_state.sections:
-        st.markdown(f"### {sec['titulo']}")
-        for campo in sec["campos"]:
-            if campo["tipo"] == "paragrafo":
-                st.markdown(f"*{campo['valor']}*")
-            else:
-                st.text(f"{campo['tipo'].upper()}: {campo['titulo']}")
+st.subheader("Pré-visualização do formulário")
+for secao in formulario["secoes"]:
+    st.markdown(f"**{secao['titulo']}**")
+    for campo in secao["campos"]:
+        if campo["tipo"] == "paragrafo":
+            st.markdown(f"> {campo['valor']}")
+        elif campo["tipo"] in ["grupoRadio", "grupoCheck"]:
+            st.markdown(f"{campo['titulo']} ({campo['tipo']}, colunas={campo['colunas']})")
+            for item in formulario["dominios"].get(campo["dominio"], []):
+                st.write(f"- {item['descricao']}")
+        else:
+            st.write(f"{campo['titulo']} ({campo['tipo']})")
 
-# Exportação
-st.subheader("Exportar")
-xml_bytes = export_xml_gfe()
-st.download_button("⬇️ Exportar como XML", xml_bytes, file_name="formulario.xml")
-st.download_button("⬇️ Exportar como GFE", xml_bytes, file_name="formulario.gfe")
+# Exportar
+st.subheader("Exportar Formulário")
+xml_bytes = gerar_xml(formulario)
+st.download_button("Exportar XML", data=xml_bytes, file_name="formulario.xml", mime="application/xml")
+st.download_button("Exportar GFE", data=xml_bytes, file_name="formulario.gfe", mime="application/octet-stream")
