@@ -7,8 +7,6 @@ st.set_page_config(page_title="Construtor de Formulários", layout="centered")
 # Inicializar estado
 if "formulario" not in st.session_state:
     st.session_state.formulario = {"nome": "", "versao": "", "secoes": []}
-if "nova_secao" not in st.session_state:
-    st.session_state.nova_secao = {"titulo": "", "largura": 500, "campos": []}
 
 st.title("Construtor de Formulários")
 
@@ -24,19 +22,16 @@ st.markdown("---")
 
 # Criar nova seção
 with st.expander("➕ Adicionar Seção", expanded=True):
-    st.session_state.nova_secao["titulo"] = st.text_input(
-        "Título da Seção", st.session_state.nova_secao["titulo"]
-    )
-    st.session_state.nova_secao["largura"] = st.number_input(
-        "Largura da Seção", min_value=100, value=500, step=10
+    titulo_secao = st.text_input("Título da Seção", key="nova_secao_titulo")
+    largura_secao = st.number_input(
+        "Largura da Seção", min_value=100, value=500, step=10, key="nova_secao_largura"
     )
 
     if st.button("Salvar Seção"):
-        if st.session_state.nova_secao["titulo"]:
-            st.session_state.formulario["secoes"].append(
-                st.session_state.nova_secao.copy()
-            )
-            st.session_state.nova_secao = {"titulo": "", "largura": 500, "campos": []}
+        if titulo_secao.strip():
+            nova_secao = {"titulo": titulo_secao, "largura": largura_secao, "campos": []}
+            st.session_state.formulario["secoes"].append(nova_secao)
+            st.session_state["nova_secao_titulo"] = ""  # limpa campo
             st.rerun()
 
 # Adicionar campos à última seção
@@ -44,31 +39,32 @@ if st.session_state.formulario["secoes"]:
     secao_atual = st.session_state.formulario["secoes"][-1]
 
     with st.expander(f"➕ Adicionar Campos à seção: {secao_atual['titulo']}", expanded=True):
-        titulo = st.text_input("Título do Campo")
+        titulo = st.text_input("Título do Campo", key="campo_titulo")
         tipo = st.selectbox(
             "Tipo do Campo",
-            ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"]
+            ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"],
+            key="campo_tipo"
         )
         obrigatorio = False
-        if tipo not in ["paragrafo"]:
-            obrigatorio = st.checkbox("Obrigatório", value=False)
+        if tipo != "paragrafo":
+            obrigatorio = st.checkbox("Obrigatório", value=False, key="campo_obrigatorio")
 
-        largura = st.number_input("Largura", min_value=100, value=450, step=10)
+        largura = st.number_input("Largura", min_value=100, value=450, step=10, key="campo_largura")
         altura = None
-        if tipo in ["texto-area"]:
-            altura = st.number_input("Altura", min_value=50, value=100, step=10)
+        if tipo == "texto-area":
+            altura = st.number_input("Altura", min_value=50, value=100, step=10, key="campo_altura")
 
         valor_paragrafo = ""
         if tipo == "paragrafo":
-            valor_paragrafo = st.text_area("Valor do Parágrafo")
+            valor_paragrafo = st.text_area("Valor do Parágrafo", key="campo_valor_paragrafo")
 
         colunas = None
         dominios = []
         if tipo in ["grupoRadio", "grupoCheck"]:
-            colunas = st.number_input("Quantidade de Colunas", min_value=1, max_value=5, value=1)
-            qtd_dominios = st.number_input("Quantidade de Domínios", min_value=1, max_value=10, value=2)
+            colunas = st.number_input("Quantidade de Colunas", min_value=1, max_value=5, value=1, key="campo_colunas")
+            qtd_dominios = st.number_input("Quantidade de Domínios", min_value=1, max_value=10, value=2, key="campo_qtd_dom")
             for i in range(qtd_dominios):
-                desc = st.text_input(f"Descrição Domínio {i+1}", key=f"dom_{i}")
+                desc = st.text_input(f"Descrição Domínio {i+1}", key=f"campo_dom_{i}")
                 if desc:
                     dominios.append({"descricao": desc, "valor": desc.replace(" ", "_").upper()})
 
@@ -84,6 +80,7 @@ if st.session_state.formulario["secoes"]:
                 "dominios": dominios,
             }
             secao_atual["campos"].append(campo)
+            st.session_state["campo_titulo"] = ""
             st.rerun()
 
 # Listar seções e permitir edição/exclusão
