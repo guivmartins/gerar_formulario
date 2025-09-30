@@ -19,7 +19,8 @@ formulario = st.session_state.formulario
 # Função para exportar XML
 # ==============================
 def exportar_xml():
-    root = ET.Element("formulario", {
+    root = ET.Element("gxsi:formulario", {
+        "xmlns:gxsi": "http://www.w3.org/2001/XMLSchema-instance",
         "nome": formulario["nome"],
         "descricao": formulario["descricao"],
         "versao": formulario["versao"]
@@ -30,10 +31,15 @@ def exportar_xml():
     dominios_global = ET.Element("dominios")
 
     for secao in formulario["secoes"]:
-        secao_el = ET.SubElement(elementos, "grupo", {"titulo": secao["titulo"]})
+        secao_el = ET.SubElement(elementos, "elemento", {
+            "gxsi:type": "seccao",
+            "titulo": secao["titulo"]
+        })
+        sub_el = ET.SubElement(secao_el, "elementos")
+
         for campo in secao["campos"]:
             if campo["tipo"] == "paragrafo":
-                ET.SubElement(secao_el, "elemento", {
+                ET.SubElement(sub_el, "elemento", {
                     "gxsi:type": "paragrafo",
                     "valor": campo["valor"],
                     "largura": str(campo["largura"])
@@ -51,7 +57,7 @@ def exportar_xml():
                 if campo["tipo"] in ["grupoRadio", "grupoCheck"]:
                     atributos["colunas"] = str(campo["colunas"])
 
-                el = ET.SubElement(secao_el, "elemento", atributos)
+                el = ET.SubElement(sub_el, "elemento", atributos)
 
                 if campo["tipo"] in ["grupoRadio", "grupoCheck"]:
                     dominio_el = ET.SubElement(dominios_global, "dominio", {
@@ -70,14 +76,14 @@ def exportar_xml():
     # Adiciona <dominios> fora de <elementos>
     root.append(dominios_global)
 
-    xml_str = ET.tostring(root, encoding="utf-8")
+    xml_str = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     parsed = minidom.parseString(xml_str)
     return parsed.toprettyxml(indent="  ", encoding="utf-8")
 
 # ==============================
 # UI - Formulário principal
 # ==============================
-st.title("Construtor de Formulários 1.0")
+st.title("Construtor de Formulários 1.1")
 
 formulario["nome"] = st.text_input("Nome do Formulário", formulario["nome"])
 formulario["descricao"] = st.text_area("Descrição", formulario["descricao"])
