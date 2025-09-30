@@ -22,16 +22,13 @@ st.markdown("---")
 
 # Criar nova seção
 with st.expander("➕ Adicionar Seção", expanded=True):
-    titulo_secao = st.text_input("Título da Seção", key="nova_secao_titulo")
-    largura_secao = st.number_input(
-        "Largura da Seção", min_value=100, value=500, step=10, key="nova_secao_largura"
-    )
+    titulo_secao = st.text_input("Título da Seção")
+    largura_secao = st.number_input("Largura da Seção", min_value=100, value=500, step=10)
 
     if st.button("Salvar Seção"):
         if titulo_secao.strip():
             nova_secao = {"titulo": titulo_secao, "largura": largura_secao, "campos": []}
             st.session_state.formulario["secoes"].append(nova_secao)
-            st.session_state["nova_secao_titulo"] = ""  # limpa campo
             st.rerun()
 
 # Adicionar campos à última seção
@@ -39,32 +36,28 @@ if st.session_state.formulario["secoes"]:
     secao_atual = st.session_state.formulario["secoes"][-1]
 
     with st.expander(f"➕ Adicionar Campos à seção: {secao_atual['titulo']}", expanded=True):
-        titulo = st.text_input("Título do Campo", key="campo_titulo")
-        tipo = st.selectbox(
-            "Tipo do Campo",
-            ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"],
-            key="campo_tipo"
-        )
+        titulo = st.text_input("Título do Campo")
+        tipo = st.selectbox("Tipo do Campo", ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"])
         obrigatorio = False
         if tipo != "paragrafo":
-            obrigatorio = st.checkbox("Obrigatório", value=False, key="campo_obrigatorio")
+            obrigatorio = st.checkbox("Obrigatório", value=False)
 
-        largura = st.number_input("Largura", min_value=100, value=450, step=10, key="campo_largura")
+        largura = st.number_input("Largura", min_value=100, value=450, step=10)
         altura = None
         if tipo == "texto-area":
-            altura = st.number_input("Altura", min_value=50, value=100, step=10, key="campo_altura")
+            altura = st.number_input("Altura", min_value=50, value=100, step=10)
 
         valor_paragrafo = ""
         if tipo == "paragrafo":
-            valor_paragrafo = st.text_area("Valor do Parágrafo", key="campo_valor_paragrafo")
+            valor_paragrafo = st.text_area("Valor do Parágrafo")
 
         colunas = None
         dominios = []
         if tipo in ["grupoRadio", "grupoCheck"]:
-            colunas = st.number_input("Quantidade de Colunas", min_value=1, max_value=5, value=1, key="campo_colunas")
-            qtd_dominios = st.number_input("Quantidade de Domínios", min_value=1, max_value=10, value=2, key="campo_qtd_dom")
+            colunas = st.number_input("Quantidade de Colunas", min_value=1, max_value=5, value=1)
+            qtd_dominios = st.number_input("Quantidade de Domínios", min_value=1, max_value=10, value=2)
             for i in range(qtd_dominios):
-                desc = st.text_input(f"Descrição Domínio {i+1}", key=f"campo_dom_{i}")
+                desc = st.text_input(f"Descrição Domínio {i+1}", key=f"dom_{i}")
                 if desc:
                     dominios.append({"descricao": desc, "valor": desc.replace(" ", "_").upper()})
 
@@ -80,18 +73,13 @@ if st.session_state.formulario["secoes"]:
                 "dominios": dominios,
             }
             secao_atual["campos"].append(campo)
-            st.session_state["campo_titulo"] = ""
             st.rerun()
 
-# Listar seções e permitir edição/exclusão
+# Listar seções
 for i, secao in enumerate(st.session_state.formulario["secoes"]):
     with st.expander(f"✏️ Seção: {secao['titulo']}", expanded=False):
-        secao["titulo"] = st.text_input(
-            "Título da Seção", value=secao["titulo"], key=f"sec_titulo_{i}"
-        )
-        secao["largura"] = st.number_input(
-            "Largura da Seção", min_value=100, value=secao["largura"], step=10, key=f"sec_largura_{i}"
-        )
+        secao["titulo"] = st.text_input("Título da Seção", value=secao["titulo"], key=f"sec_titulo_{i}")
+        secao["largura"] = st.number_input("Largura da Seção", min_value=100, value=secao["largura"], step=10, key=f"sec_largura_{i}")
 
         if st.button(f"🗑️ Excluir Seção {i+1}", key=f"del_secao_{i}"):
             st.session_state.formulario["secoes"].pop(i)
@@ -99,54 +87,10 @@ for i, secao in enumerate(st.session_state.formulario["secoes"]):
 
         st.markdown("**Campos desta seção:**")
         for j, campo in enumerate(secao["campos"]):
-            with st.container():
-                st.markdown(f"---\n**Campo {j+1}: {campo['titulo']}**")
-
-                campo["titulo"] = st.text_input(
-                    "Título do Campo", value=campo["titulo"], key=f"edit_campo_titulo_{i}_{j}"
-                )
-                campo["tipo"] = st.selectbox(
-                    "Tipo do Campo",
-                    ["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"],
-                    index=["texto", "texto-area", "paragrafo", "grupoRadio", "grupoCheck"].index(campo["tipo"]),
-                    key=f"edit_campo_tipo_{i}_{j}"
-                )
-
-                if campo["tipo"] != "paragrafo":
-                    campo["obrigatorio"] = st.checkbox(
-                        "Obrigatório", value=campo["obrigatorio"], key=f"edit_campo_obrigatorio_{i}_{j}"
-                    )
-
-                campo["largura"] = st.number_input(
-                    "Largura", min_value=100, value=campo["largura"], step=10, key=f"edit_campo_largura_{i}_{j}"
-                )
-
-                if campo["tipo"] == "texto-area":
-                    campo["altura"] = st.number_input(
-                        "Altura", min_value=50, value=campo["altura"] or 100, step=10, key=f"edit_campo_altura_{i}_{j}"
-                    )
-
-                if campo["tipo"] == "paragrafo":
-                    campo["valor"] = st.text_area(
-                        "Valor do Parágrafo", value=campo["valor"], key=f"edit_campo_valor_{i}_{j}"
-                    )
-
-                if campo["tipo"] in ["grupoRadio", "grupoCheck"]:
-                    campo["colunas"] = st.number_input(
-                        "Quantidade de Colunas", min_value=1, max_value=5,
-                        value=campo["colunas"] or 1, key=f"edit_campo_colunas_{i}_{j}"
-                    )
-                    for k, d in enumerate(campo["dominios"]):
-                        campo["dominios"][k]["descricao"] = st.text_input(
-                            f"Descrição Domínio {k+1}", value=d["descricao"], key=f"edit_campo_dom_{i}_{j}_{k}"
-                        )
-                        campo["dominios"][k]["valor"] = st.text_input(
-                            f"Valor Domínio {k+1}", value=d["valor"], key=f"edit_campo_val_{i}_{j}_{k}"
-                        )
-
-                if st.button(f"🗑️ Excluir Campo {j+1}", key=f"del_campo_{i}_{j}"):
-                    secao["campos"].pop(j)
-                    st.rerun()
+            st.markdown(f"- {campo['titulo']} ({campo['tipo']})")
+            if st.button(f"🗑️ Excluir Campo {j+1}", key=f"del_campo_{i}_{j}"):
+                secao["campos"].pop(j)
+                st.rerun()
 
 st.markdown("---")
 
