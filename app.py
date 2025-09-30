@@ -27,13 +27,13 @@ st.markdown("---")
 # =============================
 with st.expander("➕ Adicionar Seção", expanded=True):
     st.session_state.nova_secao["titulo"] = st.text_input("Título da Seção", st.session_state.nova_secao["titulo"])
-    st.session_state.nova_secao["largura"] = st.number_input("Largura da Seção", min_value=100, value=500, step=10)
+    st.session_state.nova_secao["largura"] = st.number_input("Largura da Seção", min_value=100, value=st.session_state.nova_secao["largura"], step=10)
 
     if st.button("Salvar Seção"):
         if st.session_state.nova_secao["titulo"]:
             st.session_state.formulario["secoes"].append(st.session_state.nova_secao.copy())
             st.session_state.nova_secao = {"titulo": "", "largura": 500, "campos": []}
-            st.rerun()
+            # não usar st.rerun aqui → mantém a seção visível
 
 # =============================
 # Listagem e edição de seções
@@ -46,7 +46,7 @@ for i, secao in enumerate(st.session_state.formulario["secoes"]):
         secao["titulo"] = novo_titulo
         secao["largura"] = nova_largura
 
-        # Excluir seção
+        # Excluir seção (com rerun para atualizar a tela)
         if st.button(f"🗑️ Excluir Seção {i+1}", key=f"del_secao_{i}"):
             st.session_state.formulario["secoes"].pop(i)
             st.rerun()
