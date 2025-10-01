@@ -14,6 +14,7 @@ if "formulario" not in st.session_state:
     }
 
 if "nova_secao" not in st.session_state:
+    # inicializa como string antes do widget ser criado — OK
     st.session_state.nova_secao = ""
 
 if "novo_campo" not in st.session_state:
@@ -48,16 +49,24 @@ def construir_xml():
             attrs = {
                 "gxsi:type": campo["tipo"],
                 "titulo": campo["titulo"],
-                "obrigatorio": str(campo.get("obrigatorio", "false")).lower(),
+                "obrigatorio": str(campo.get("obrigatorio", False)).lower(),
                 "largura": "450"
             }
-            if campo["tipo"] == "texto-area":
-                attrs["altura"] = "100"
+            if campo["tipo"] == "texto-area" and campo.get("altura"):
+                attrs["altura"] = str(campo.get("altura"))
             if campo["tipo"] in ["grupoRadio", "grupoCheck"] and campo.get("dominio"):
                 attrs["dominio"] = campo["dominio"]
-                attrs["colunas"] = "2"
+                attrs["colunas"] = str(campo.get("colunas", 1))
 
-            ET.SubElement(el_sub, "elemento", attrs)
+            # Se for parágrafo, usamos a estrutura com atributo valor
+            if campo["tipo"] == "paragrafo":
+                ET.SubElement(el_sub, "elemento", {
+                    "gxsi:type": "paragrafo",
+                    "valor": campo.get("valor", ""),
+                    "largura": attrs["largura"]
+                })
+            else:
+                ET.SubElement(el_sub, "elemento", attrs)
 
     if form["dominios"]:
         doms = ET.SubElement(root, "dominios")
@@ -85,7 +94,9 @@ col1, col2 = st.columns([1, 1])
 with col1:
     st.title("Construtor de Formulários 2.0")
 
+    # Mantive o input para o nome do formulário (esquerda)
     st.text_input("Nome do Formulário", key="form_nome", value=st.session_state.formulario["nome"])
+    # atualiza modelo (mantive a lógica anterior)
     st.session_state.formulario["nome"] = st.session_state.form_nome
 
     st.subheader("Seções")
@@ -104,7 +115,7 @@ with col1:
                         index=["texto", "texto-area", "grupoRadio", "grupoCheck", "paragrafo"].index(campo["tipo"]),
                         key=f"campo_tipo_{i}_{j}"
                     )
-                    campo["obrigatorio"] = st.checkbox("Obrigatório", campo["obrigatorio"], key=f"campo_obr_{i}_{j}")
+                    campo["obrigatorio"] = st.checkbox("Obrigatório", campo.get("obrigatorio", False), key=f"campo_obr_{i}_{j}")
                     if campo["tipo"] in ["grupoRadio", "grupoCheck"]:
                         campo["dominio"] = st.text_input("Domínio", campo.get("dominio", ""), key=f"campo_dom_{i}_{j}")
 
@@ -115,26 +126,28 @@ with col1:
                     "obrigatorio": False
                 })
 
+    # Campo para nova seção (usando chave "nova_secao")
     nova_sec = st.text_input("Nova Seção", key="nova_secao")
     if st.button("Adicionar Seção"):
         if nova_sec.strip():
             st.session_state.formulario["secoes"].append({"titulo": nova_sec.strip(), "campos": []})
-            st.session_state.nova_secao = ""
+            # <-- NÃO redefinimos st.session_state.nova_secao aqui (removido para evitar StreamlitAPIException)
 
 # Coluna 2 - Pré-visualização do Formulário
 with col2:
-    st.subheader("📋 Pré-visualização do Formulário")
-
-    st.header(st.session_state.formulario["nome"])  # Nome do formulário maior
+    # Nome do formulário maior
+    st.header(st.session_state.formulario["nome"])
 
     for secao in st.session_state.formulario["secoes"]:
-        st.subheader(secao["titulo"])  # Nome da seção um pouco menor
+        # Seção um pouco menor que o nome do formulário
+        st.subheader(secao["titulo"])
 
         for campo in secao["campos"]:
-            st.markdown(f"• **{campo['titulo']}** ({campo['tipo']})")  # bolinha preta como marcador
+            # bolinha preta como marcador
+            st.markdown(f"• **{campo['titulo']}** ({campo['tipo']})")
 
 # XML no fim da página
-st.divider()
+st.markdown("---")
 st.subheader("Pré-visualização do XML")
 xml_str = construir_xml()
 st.code(xml_str, language="xml")
