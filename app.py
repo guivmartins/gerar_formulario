@@ -125,7 +125,7 @@ with col2:
     st.subheader("📋 Pré-visualização do Formulário")
     st.write(f"**Nome:** {st.session_state.formulario['nome']}")
     for secao in st.session_state.formulario["secoes"]:
-        st.markdown(f"### 📌 {secao['titulo']}")
+        st.write(f"### • {secao['titulo']}") #antes markdown
         for campo in secao["campos"]:
             if campo["tipo"] == "texto":
                 st.text_input(campo["titulo"], value="")
@@ -235,3 +235,4 @@ def gerar_xml():
 st.markdown("---")
 st.subheader("📑 Pré-visualização do XML")
 st.code(gerar_xml(), language="xml")
+
