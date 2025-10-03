@@ -1,4 +1,4 @@
-# app.py - Construtor de Formulários com suporte a Tabela (versão 5.1)
+# app.py - Construtor de Formulários com Domínios (versão 6.0 corrigida)
 import streamlit as st
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
@@ -10,122 +10,119 @@ st.set_page_config(page_title="Construtor de Formulários", layout="centered")
 # -------------------------
 if "formulario" not in st.session_state:
     st.session_state.formulario = {"nome": "", "versao": "1.0", "secoes": []}
+if "dominios" not in st.session_state:
+    st.session_state.dominios = {}
 
 # -------------------------
 # Funções auxiliares
 # -------------------------
-def adicionar_secao(titulo, largura):
-    st.session_state.formulario["secoes"].append(
-        {"tipo": "seccao", "titulo": titulo, "largura": largura, "elementos": []}
-    )
+def adicionar_secao(nome):
+    st.session_state.formulario["secoes"].append({"nome": nome, "campos": []})
 
-def adicionar_elemento(secao, tipo, titulo, descricao, obrigatorio, largura, opcoes=None):
-    elemento = {
-        "tipo": tipo,
-        "titulo": titulo,
-        "descricao": descricao,
-        "obrigatorio": obrigatorio,
-        "largura": largura,
-        "opcoes": opcoes or [],
-        "elementos": []  # suporte a filhos (no caso de tabela)
-    }
-    st.session_state.formulario["secoes"][secao]["elementos"].append(elemento)
-
-def adicionar_tabela(secao):
-    # tabela funciona como container
-    tabela = {
-        "tipo": "tabela",
-        "elementos": []  # os elementos filhos vão aqui
-    }
-    st.session_state.formulario["secoes"][secao]["elementos"].append(tabela)
-
-def gerar_xml():
-    root = ET.Element("gxsi:formulario", {
-        "xmlns:gxsi": "http://www.w3.org/2001/XMLSchema-instance",
-        "nome": st.session_state.formulario["nome"],
-        "versao": st.session_state.formulario["versao"],
-    })
-    elementos_tag = ET.SubElement(root, "elementos")
-
+def adicionar_campo(secao_nome, nome, tipo, obrigatorio, dominio):
     for secao in st.session_state.formulario["secoes"]:
-        secao_tag = ET.SubElement(elementos_tag, "elemento", {
-            "gxsi:type": "seccao",
-            "titulo": secao["titulo"],
-            "largura": secao["largura"],
-        })
-        secao_elementos_tag = ET.SubElement(secao_tag, "elementos")
+        if secao["nome"] == secao_nome:
+            secao["campos"].append(
+                {"nome": nome, "tipo": tipo, "obrigatorio": obrigatorio, "dominio": dominio}
+            )
 
-        for elem in secao["elementos"]:
-            if elem["tipo"] == "tabela":
-                tabela_tag = ET.SubElement(secao_elementos_tag, "elemento", {"gxsi:type": "tabela"})
-                linhas_tag = ET.SubElement(tabela_tag, "linhas")
-                linha_tag = ET.SubElement(linhas_tag, "linha")
-                celulas_tag = ET.SubElement(linha_tag, "celulas")
-                celula_tag = ET.SubElement(celulas_tag, "celula", {"linhas": "1", "colunas": "1"})
-                elementos_celula_tag = ET.SubElement(celula_tag, "elementos")
+def gerar_xml(formulario):
+    root = ET.Element("formulario", xmlns="http://www.gxsi.com.br/formulario")
+    ET.SubElement(root, "nome").text = formulario["nome"]
+    ET.SubElement(root, "versao").text = formulario["versao"]
 
-                # filhos dentro da tabela
-                for filho in elem["elementos"]:
-                    gerar_elemento_xml(filho, elementos_celula_tag)
-            else:
-                gerar_elemento_xml(elem, secao_elementos_tag)
+    elementos = ET.SubElement(root, "elementos")
+    for secao in formulario["secoes"]:
+        secao_el = ET.SubElement(elementos, "secao", nome=secao["nome"])
+        for campo in secao["campos"]:
+            campo_el = ET.SubElement(secao_el, "campo")
+            ET.SubElement(campo_el, "nome").text = campo["nome"]
+            ET.SubElement(campo_el, "tipo").text = campo["tipo"]
+            ET.SubElement(campo_el, "obrigatorio").text = str(campo["obrigatorio"]).lower()
+            if campo["dominio"]:
+                ET.SubElement(campo_el, "dominio").text = campo["dominio"]
+
+    dominios_el = ET.SubElement(root, "dominios")
+    for nome_dom, valores in st.session_state.dominios.items():
+        dom_el = ET.SubElement(dominios_el, "dominio", nome=nome_dom)
+        for valor in valores:
+            ET.SubElement(dom_el, "valor").text = valor
 
     xml_str = ET.tostring(root, encoding="utf-8")
-    return minidom.parseString(xml_str).toprettyxml(indent="   ", encoding="UTF-8")
+    return minidom.parseString(xml_str).toprettyxml(indent="   ", encoding="utf-8").decode("utf-8")
 
-def gerar_elemento_xml(elem, parent_tag):
-    elem_tag = ET.SubElement(parent_tag, "elemento", {
-        "gxsi:type": elem["tipo"],
-        "titulo": elem["titulo"],
-        "descricao": elem["descricao"],
-        "obrigatorio": str(elem["obrigatorio"]).lower(),
-        "largura": elem["largura"],
-    })
+def gerar_preview_formulario(formulario):
+    st.subheader("📋 Pré-visualização do Formulário")
 
-    conteudo_tag = ET.SubElement(elem_tag, "conteudo", {"gxsi:type": "valor"})
-    if elem["tipo"] == "lista" and elem["opcoes"]:
-        for opc in elem["opcoes"]:
-            ET.SubElement(conteudo_tag, "opcao").text = opc
+    st.markdown(f"**Nome:** {formulario['nome']}")
+    st.markdown(f"**Versão:** {formulario['versao']}")
+
+    for secao in formulario["secoes"]:
+        st.markdown(f"### {secao['nome']}")
+        if len(secao["campos"]) > 0:
+            tabela_md = "| Nome | Tipo | Obrigatório | Domínio |\n"
+            tabela_md += "|------|------|-------------|---------|\n"
+            for campo in secao["campos"]:
+                obrig = "✅" if campo["obrigatorio"] else "❌"
+                dominio = campo["dominio"] if campo["dominio"] else "-"
+                tabela_md += f"| {campo['nome']} | {campo['tipo']} | {obrig} | {dominio} |\n"
+            st.markdown(tabela_md)
+        else:
+            st.markdown("_(Sem campos nesta seção)_")
+
+    # Pré-visualização do XML
+    st.subheader("📄 Pré-visualização XML")
+    xml_str = gerar_xml(formulario)
+    st.code(xml_str, language="xml")
 
 # -------------------------
 # Interface Streamlit
 # -------------------------
-st.title("Construtor de Formulários 5.1 (com Tabela)")
+st.title("🛠️ Construtor de Formulários GXSI")
 
-st.session_state.formulario["nome"] = st.text_input("Nome do Formulário", st.session_state.formulario["nome"])
+# Dados principais
+st.header("📑 Dados do Formulário")
+st.session_state.formulario["nome"] = st.text_input("Nome do formulário", st.session_state.formulario["nome"])
 st.session_state.formulario["versao"] = st.text_input("Versão", st.session_state.formulario["versao"])
 
+# Seções
+st.header("📂 Seções")
+nome_secao = st.text_input("Nome da nova seção")
 if st.button("Adicionar Seção"):
-    adicionar_secao("Nova Seção", "500")
+    if nome_secao.strip():
+        adicionar_secao(nome_secao.strip())
 
-for i, secao in enumerate(st.session_state.formulario["secoes"]):
-    with st.expander(f"Seção: {secao['titulo']}", expanded=True):
-        secao["titulo"] = st.text_input("Título da Seção", secao["titulo"], key=f"titulo_secao_{i}")
-        secao["largura"] = st.text_input("Largura da Seção", secao["largura"], key=f"largura_secao_{i}")
+for secao in st.session_state.formulario["secoes"]:
+    with st.expander(f"Seção: {secao['nome']}"):
+        nome_campo = st.text_input(f"Nome do campo ({secao['nome']})", key=f"campo_nome_{secao['nome']}")
+        tipo_campo = st.selectbox(f"Tipo do campo ({secao['nome']})",
+                                  ["texto", "numero", "data", "booleano", "dominio"],
+                                  key=f"campo_tipo_{secao['nome']}")
+        obrigatorio = st.checkbox(f"Obrigatório ({secao['nome']})", key=f"campo_obr_{secao['nome']}")
+        dominio = ""
+        if tipo_campo == "dominio":
+            dominio = st.selectbox(f"Domínio ({secao['nome']})", list(st.session_state.dominios.keys()) or [""])
 
-        if st.button("Adicionar Tabela", key=f"add_tab_{i}"):
-            adicionar_tabela(i)
+        if st.button(f"Adicionar Campo ({secao['nome']})", key=f"addcampo_{secao['nome']}"):
+            if nome_campo.strip():
+                adicionar_campo(secao["nome"], nome_campo.strip(), tipo_campo, obrigatorio, dominio)
 
-        if st.button("Adicionar Elemento", key=f"add_elem_{i}"):
-            adicionar_elemento(i, "texto", "Novo Campo", "descricao", False, "225")
+# Domínios
+st.header("📚 Domínios")
+nome_dominio = st.text_input("Nome do domínio")
+valores_dominio = st.text_area("Valores (um por linha)")
+if st.button("Adicionar Domínio"):
+    if nome_dominio.strip():
+        st.session_state.dominios[nome_dominio.strip()] = [v.strip() for v in valores_dominio.splitlines() if v.strip()]
 
-        for j, elem in enumerate(secao["elementos"]):
-            if elem["tipo"] == "tabela":
-                st.markdown(f"📊 **Tabela** (contém {len(elem['elementos'])} elementos)")
-                if st.button("Adicionar Campo na Tabela", key=f"add_elem_tab_{i}_{j}"):
-                    elem["elementos"].append({
-                        "tipo": "texto",
-                        "titulo": "Campo Tabela",
-                        "descricao": "descricao",
-                        "obrigatorio": False,
-                        "largura": "225",
-                        "opcoes": []
-                    })
-            else:
-                elem["titulo"] = st.text_input("Título", elem["titulo"], key=f"titulo_elem_{i}_{j}")
-                elem["descricao"] = st.text_input("Descrição", elem["descricao"], key=f"desc_elem_{i}_{j}")
+if st.session_state.dominios:
+    for dom, vals in st.session_state.dominios.items():
+        st.markdown(f"**{dom}:** {', '.join(vals)}")
 
-if st.button("Gerar XML"):
-    xml_final = gerar_xml()
-    st.download_button("Baixar XML", data=xml_final, file_name="formulario.xml", mime="application/xml")
-    st.code(xml_final.decode("utf-8"), language="xml")
+# Preview
+gerar_preview_formulario(st.session_state.formulario)
+
+# Exportação
+st.header("💾 Exportar")
+xml_str = gerar_xml(st.session_state.formulario)
+st.download_button("Baixar XML", xml_str, file_name="formulario.xml", mime="application/xml")
