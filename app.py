@@ -1,4 +1,4 @@
-# app.py - Construtor de Formulários com Domínios completos
+# app.py - Construtor de Formulários com Domínios completos (versão 5.0 funcionando)
 import streamlit as st
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
@@ -243,3 +243,4 @@ with col2:
 st.markdown("---")
 st.subheader("📑 Pré-visualização do XML")
 st.code(gerar_xml(st.session_state.formulario), language="xml")
+
