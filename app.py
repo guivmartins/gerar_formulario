@@ -295,11 +295,3 @@ with col_preview:
     xml_out = export_to_gxsi_xml(st.session_state.formulario)
     st.code(xml_out, language="xml")
     st.download_button("Baixar XML", data=xml_out, file_name="formulario.xml", mime="application/xml")
-
-# Rodapé com notas
-st.markdown("---")
-st.caption(
-    "- Domínios (dominioEstatico) são criados/atualizados quando você adiciona opções a um elemento que usa domínio.\n"
-    "- Apenas dominioItemValor é gerado (conforme solicitado).\n"
-    "- Para editar opções de um domínio já existente, informe a mesma chave no elemento e remova/adicione opções diretamente ali."
-)
