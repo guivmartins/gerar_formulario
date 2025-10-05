@@ -1,19 +1,16 @@
-# app.py — Construtor de Formulários GXSI (v6.4 Estável)
-# - Restaura regras de domínio (chave automática, edição inline de itens)
-# - Agrupamento de elementos em <elemento gxsi:type="tabela"> quando in_table=True
-# - Preview simplificado + export XML compatível com 4.0
+# app.py - Construtor GXSI (v6.4 corrigido: domínios no padrão v4.0)
 import streamlit as st
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
-import re
 import unicodedata
+import re
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Construtor de Formulários GXSI - v6.4", layout="wide")
+st.set_page_config(page_title="Construtor GXSI - v6.4 (domínios corrigidos)", layout="wide")
 
-# ---------------------------
-# Helpers / Estado inicial
-# ---------------------------
+# --------------------------------
+# Helpers
+# --------------------------------
 ELEMENT_TYPES = [
     "texto", "texto-area", "data", "moeda",
     "cpf", "cnpj", "email", "telefone", "check",
@@ -22,78 +19,60 @@ ELEMENT_TYPES = [
 ]
 DOMAIN_TYPES = {"comboBox", "comboFiltro", "grupoRadio", "grupoCheck"}
 
-def pascalcase(s: str) -> str:
-    if not s:
-        return ""
-    # remove accents
-    s = unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("ASCII")
-    parts = re.split(r'\W+', s)
-    parts = [p.capitalize() for p in parts if p.strip()]
-    return "".join(parts)
-
-def make_domain_key(title: str) -> str:
+def normalize_to_domain_key(title: str) -> str:
+    """Converte título para CHAVE do domínio: remover acentos, non-alnum, maiúsculas, sem espaços."""
     if not title:
         return ""
-    pc = pascalcase(title)
-    if not pc:
-        return ""
-    return f"dom_{pc}"
+    s = unicodedata.normalize("NFKD", title).encode("ASCII", "ignore").decode("ASCII")
+    s = re.sub(r'[^0-9A-Za-z]+', '', s)  # remove tudo que não é alfanumérico
+    return s.upper()
 
-def prettify_xml(root: ET.Element) -> str:
-    raw = ET.tostring(root, encoding="utf-8")
+def prettify_xml(elem: ET.Element) -> str:
+    raw = ET.tostring(elem, encoding="utf-8")
     parsed = minidom.parseString(raw)
     return parsed.toprettyxml(indent="  ", encoding="utf-8").decode("utf-8")
 
-# Session state setup
+# --------------------------------
+# Session state init
+# --------------------------------
 if "formulario" not in st.session_state:
     st.session_state.formulario = {
         "nome": "Formulário Exemplo",
         "versao": "1.0",
-        "secoes": []  # each section: {"titulo", "largura", "elementos": [ ... ]}
+        "secoes": []  # cada seção: {"titulo","largura","elementos":[...]}
     }
 
-# global domains store: key -> {"tipo":"estatico"|"dinamico", "itens":[{"descricao","valor"}, ...]}
+# dominios globais persistidos: chave -> {"tipo":"estatico"|"dinamico", "itens":[{"descricao","valor"}, ...]}
 if "dominios" not in st.session_state:
     st.session_state.dominios = {}
 
-# temporary domain items while editing an element (key -> list of items)
-if "temp_domain_items" not in st.session_state:
-    st.session_state.temp_domain_items = {}
-
-def add_section(title: str, largura: int = 500):
-    st.session_state.formulario["secoes"].append({"titulo": title, "largura": largura, "elementos": []})
-
-def add_element_to_section(sec_idx: int, element: dict):
-    st.session_state.formulario["secoes"][sec_idx]["elementos"].append(element)
-
-# ---------------------------
-# XML generation (GXSI-compatible to v4.0)
-# ---------------------------
+# --------------------------------
+# XML generation (v4.0 style)
+# --------------------------------
 def create_element_xml(parent: ET.Element, el: dict):
     attrs = {"gxsi:type": el["tipo"]}
     if el["tipo"] != "tabela":
-        # Put titulo/descricao/largura/obrigatorio/colunas where applicable
-        if "titulo" in el:
+        if el.get("titulo") is not None:
             attrs["titulo"] = el.get("titulo", "")
             attrs["descricao"] = el.get("descricao", el.get("titulo", ""))
-        if "largura" in el:
+        if el.get("largura") is not None:
             attrs["largura"] = str(el.get("largura"))
         if el["tipo"] not in ("paragrafo", "rotulo"):
             attrs["obrigatorio"] = str(bool(el.get("obrigatorio", False))).lower()
-        if el["tipo"] in ("comboBox", "comboFiltro", "grupoRadio", "grupoCheck") and el.get("colunas"):
+        if el.get("colunas") is not None:
             attrs["colunas"] = str(el.get("colunas"))
-        if el["tipo"] == "texto-area" and el.get("altura"):
+        if el["tipo"] == "texto-area" and el.get("altura") is not None:
             attrs["altura"] = str(el.get("altura"))
         if el.get("dominio"):
-            attrs["dominio"] = el["dominio"].get("chave")
+            # v4.0: domain referenced as attribute dominio="CHAVE"
+            attrs["dominio"] = el["dominio"]["chave"]
     node = ET.SubElement(parent, "elemento", attrs)
-    # paragrafo / rotulo: set valor attribute and return
+    # paragrafo/rotulo -> valor attribute
     if el["tipo"] in ("paragrafo", "rotulo"):
         node.set("valor", el.get("titulo", ""))
         return node
+    # non-table: add conteudo gxsi:type="valor"
     if el["tipo"] != "tabela":
-        # content is always gxsi:type="valor" for elements (v4.0 style),
-        # while domain is referenced via attribute dominio="KEY" and domain block is exported separately.
         ET.SubElement(node, "conteudo", {"gxsi:type": "valor"})
     return node
 
@@ -107,7 +86,7 @@ def gerar_gxsi_xml(form):
     referenced_domains = set()
 
     for sec in form.get("secoes", []):
-        sec_attrs = {"gxsi:type": "seccao", "titulo": sec.get("titulo", ""), "largura": str(sec.get("largura", 500))}
+        sec_attrs = {"gxsi:type":"seccao", "titulo": sec.get("titulo",""), "largura": str(sec.get("largura", 500))}
         sec_el = ET.SubElement(elementos_tag, "elemento", sec_attrs)
         sec_childs = ET.SubElement(sec_el, "elementos")
 
@@ -116,13 +95,13 @@ def gerar_gxsi_xml(form):
         L = len(elems)
         while i < L:
             e = elems[i]
-            # group consecutive in_table into a tabela element
+            # agrupar consecutivos in_table em <elemento gxsi:type="tabela">
             if e.get("in_table"):
                 tabela_el = ET.SubElement(sec_childs, "elemento", {"gxsi:type": "tabela"})
                 linhas_el = ET.SubElement(tabela_el, "linhas")
                 linha_el = ET.SubElement(linhas_el, "linha")
                 celulas_el = ET.SubElement(linha_el, "celulas")
-                celula_el = ET.SubElement(celulas_el, "celula", {"linhas": "1", "colunas": "1"})
+                celula_el = ET.SubElement(celulas_el, "celula", {"linhas":"1", "colunas":"1"})
                 elementos_in_cell = ET.SubElement(celula_el, "elementos")
                 while i < L and elems[i].get("in_table"):
                     ch = elems[i]
@@ -136,93 +115,92 @@ def gerar_gxsi_xml(form):
                 create_element_xml(sec_childs, e)
                 i += 1
 
-    # Export domains block only for referenced domains
+    # montar bloco <dominios> somente para domínios referenciados
     dominios_tag = ET.SubElement(root, "dominios")
     for key in sorted(referenced_domains):
         dom_def = st.session_state.dominios.get(key)
         if not dom_def:
-            # create empty dominioEstatico to preserve ref
-            dom_el = ET.SubElement(dominios_tag, "dominio", {"gxsi:type": "dominioEstatico", "chave": key})
+            # domínio referenciado mas não definido: criar vazio para manter referência
+            dom_el = ET.SubElement(dominios_tag, "dominio", {"gxsi:type":"dominioEstatico", "chave": key})
             ET.SubElement(dom_el, "itens")
             continue
-        if dom_def.get("tipo", "estatico") == "estatico":
-            dom_el = ET.SubElement(dominios_tag, "dominio", {"gxsi:type": "dominioEstatico", "chave": key})
+        if dom_def.get("tipo","estatico") == "estatico":
+            dom_el = ET.SubElement(dominios_tag, "dominio", {"gxsi:type":"dominioEstatico", "chave": key})
             itens_el = ET.SubElement(dom_el, "itens")
             for it in dom_def.get("itens", []):
-                ET.SubElement(itens_el, "item", {"gxsi:type": "dominioItemValor", "descricao": it.get("descricao", ""), "valor": it.get("valor", "")})
+                ET.SubElement(itens_el, "item", {"gxsi:type":"dominioItemValor", "descricao": it.get("descricao",""), "valor": it.get("valor","")})
         else:
-            # dynamic: export empty structure (placeholder)
-            dom_el = ET.SubElement(dominios_tag, "dominio", {"gxsi:type": "dominioEstatico", "chave": key})
+            # dynamic -> placeholder empty itens to preserve structure
+            dom_el = ET.SubElement(dominios_tag, "dominio", {"gxsi:type":"dominioEstatico", "chave": key})
             ET.SubElement(dom_el, "itens")
 
     return prettify_xml(root)
 
-# ---------------------------
-# UI - layout: builder (left) / preview (right)
-# ---------------------------
-_CUSTOM_CSS = """
+# --------------------------------
+# UI - Builder (esquerda) / Preview (direita)
+# --------------------------------
+CUSTOM_CSS = """
 <style>
-.section-card { border:1px solid #e6eef8; padding:10px; border-radius:8px; background:#ffffff; margin-bottom:12px;}
+.section-card { border:1px solid #e6eef8; padding:10px; border-radius:8px; background:#fff; margin-bottom:12px; }
 .element-summary { padding:6px 8px; border:1px dashed #eef2f7; border-radius:6px; margin-bottom:6px; background:#fff; }
-.preview-card { border:1px solid #e6eef8; padding:12px; border-radius:8px; background:#fff; height:80vh; overflow:auto;}
-.preview-section { padding:8px; background:#f8fbff; border-radius:6px; margin-bottom:8px; font-weight:700; color:#0b5ed7;}
+.preview-card { border:1px solid #e6eef8; padding:12px; border-radius:8px; background:#fff; height:80vh; overflow:auto; }
+.preview-section { padding:8px; background:#f8fbff; border-radius:6px; margin-bottom:8px; font-weight:700; color:#0b5ed7; }
 .small-muted { color:#6b7280; font-size:13px; }
 .badge { display:inline-block; padding:3px 8px; background:#eef2ff; border-radius:999px; margin-right:6px; font-size:12px; color:#034; }
 </style>
 """
-st.markdown(_CUSTOM_CSS, unsafe_allow_html=True)
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 col_builder, col_preview = st.columns([1.6, 1.0])
 
 with col_builder:
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    st.header("Construtor de Formulários GXSI — v6.4 Estável")
+    st.header("Construtor de Formulários GXSI — v6.4 (domínios v4.0)")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Form meta
+    # meta do formulário
     c1, c2 = st.columns([3,1])
-    st.session_state.formulario["nome"] = c1.text_input("Nome do formulário", value=st.session_state.formulario.get("nome", ""), key="form_name_64")
-    st.session_state.formulario["versao"] = c2.text_input("Versão", value=st.session_state.formulario.get("versao", "1.0"), key="form_ver_64")
-
+    st.session_state.formulario["nome"] = c1.text_input("Nome do formulário", value=st.session_state.formulario.get("nome",""), key="form_name")
+    st.session_state.formulario["versao"] = c2.text_input("Versão", value=st.session_state.formulario.get("versao","1.0"), key="form_ver")
     st.markdown("---")
 
-    # Add section
-    st.subheader("➕ Adicionar Seção")
-    with st.form("form_add_section_64", clear_on_submit=True):
-        sec_title = st.text_input("Título da seção", key="sec_title_64")
-        sec_width = st.number_input("Largura (px)", min_value=100, max_value=1200, value=500, key="sec_width_64")
+    # adicionar seção (form)
+    st.subheader("➕ Nova Seção")
+    with st.form("form_add_section", clear_on_submit=True):
+        sec_title = st.text_input("Título da seção", key="sec_title")
+        sec_width = st.number_input("Largura (px)", min_value=100, max_value=1200, value=500, key="sec_width")
         if st.form_submit_button("Adicionar seção"):
             if not sec_title.strip():
                 st.error("Informe o título da seção.")
             else:
-                add_section(sec_title.strip(), int(sec_width))
+                st.session_state.formulario["secoes"].append({"titulo": sec_title.strip(), "largura": int(sec_width), "elementos": []})
                 st.success(f"Seção '{sec_title.strip()}' adicionada.")
                 st.rerun()
 
     st.markdown("---")
 
-    # Existing sections and element builder per section
+    # percorrer seções e formulário de adicionar elemento por seção
     for s_idx, sec in enumerate(st.session_state.formulario.get("secoes", [])):
         st.markdown(f'<div class="section-card">', unsafe_allow_html=True)
         st.markdown(f"### {s_idx} — {sec.get('titulo','(sem título)')}")
-        cA, cB, cC = st.columns([6,1,1])
-        if cB.button("Editar", key=f"edit_sec_{s_idx}"):
+        btns = st.columns([6,1,1])
+        if btns[1].button("Editar", key=f"edit_sec_{s_idx}"):
             st.session_state[f"edit_sec_title_{s_idx}"] = sec["titulo"]
             st.rerun()
-        if cC.button("Remover", key=f"rm_sec_{s_idx}"):
+        if btns[2].button("Remover", key=f"rm_sec_{s_idx}"):
             st.session_state.formulario["secoes"].pop(s_idx)
             st.rerun()
 
-        # show elements summary
+        # resumo dos elementos
         if sec.get("elementos"):
             st.markdown("**Elementos:**")
             for e_idx, el in enumerate(sec["elementos"]):
-                dom_marker = f" [dom={el.get('dominio').get('chave')}]" if el.get("dominio") else ""
+                dom_marker = f" [dom={el['dominio']['chave']}]" if el.get("dominio") else ""
                 in_table = " (em tabela)" if el.get("in_table") else ""
                 st.markdown(f'<div class="element-summary"><span class="badge">{el.get("tipo")}</span><strong>{el.get("titulo","(sem título)")}</strong>{in_table}{dom_marker}</div>', unsafe_allow_html=True)
 
         st.markdown("---")
-        # add element form for this section
+        # formulário para adicionar elemento (um form por seção)
         with st.form(f"form_add_elem_{s_idx}", clear_on_submit=True):
             tipo = st.selectbox("Tipo do elemento", ELEMENT_TYPES, key=f"tipo_{s_idx}")
             titulo = st.text_input("Título do elemento (descrição = título)", key=f"titulo_{s_idx}")
@@ -232,50 +210,25 @@ with col_builder:
             altura = None
             if tipo == "texto-area":
                 altura = st.number_input("Altura (px)", min_value=50, max_value=800, value=120, key=f"altura_{s_idx}")
-            colunas = 1
-            # domain-specific UI
-            domain_key_preview = ""
+            colunas = None
             domain_items_local = []
-            domain_tipo = "estatico"
+
+            # se tipo usa domínio, mostrar quantidade e N campos (dentro do mesmo form)
             if tipo in DOMAIN_TYPES:
-                st.markdown("**Configuração do Domínio**")
-                # generate key from title
-                suggested_key = make_domain_key(st.session_state.get(f"titulo_{s_idx}", "") or titulo or "")
-                domain_key_preview = suggested_key
-                st.text_input("Chave do domínio (gerada automaticamente a partir do título)", value=suggested_key, key=f"dom_preview_{s_idx}", disabled=True)
-                domain_tipo = st.selectbox("Tipo do domínio", ["estatico", "dinamico"], index=0, key=f"dom_tipo_{s_idx}")
+                st.markdown("**Configuração do domínio (preencha as opções abaixo)**")
+                suggested_key = normalize_to_domain_key(st.session_state.get(f"titulo_{s_idx}", "") or titulo or "")
+                st.text_input("Chave do domínio (gerada a partir do título)", value=suggested_key, key=f"dom_key_preview_{s_idx}", disabled=True)
                 colunas = st.number_input("Colunas (para grupo/combo)", min_value=1, max_value=6, value=1, key=f"dom_cols_{s_idx}")
-                # prepare temp store
-                dk = suggested_key
-                if dk and dk not in st.session_state.temp_domain_items:
-                    # preload from existing global domain if present
-                    existing = st.session_state.dominios.get(dk, {}).get("itens", []) if st.session_state.dominios.get(dk) else []
-                    st.session_state.temp_domain_items[dk] = list(existing) if existing else []
-                if dk and domain_tipo == "estatico":
-                    st.markdown("Itens do domínio (descrição obrigatório)")
-                    c1, c2 = st.columns([3,3])
-                    new_desc = c1.text_input("Descrição", key=f"dom_new_desc_{s_idx}")
-                    new_val = c2.text_input("Valor (opcional)", key=f"dom_new_val_{s_idx}")
-                    if st.button("Adicionar item do domínio", key=f"add_dom_item_{s_idx}"):
-                        if not new_desc.strip():
-                            st.error("Informe a descrição do item.")
-                        else:
-                            val = new_val.strip() or new_desc.strip()
-                            st.session_state.temp_domain_items.setdefault(dk, []).append({"descricao": new_desc.strip(), "valor": val})
-                            st.success("Item adicionado (temporário).")
-                            st.rerun()
-                    # list temp items with remove
-                    items_preview = st.session_state.temp_domain_items.get(dk, [])
-                    if items_preview:
-                        st.markdown("Itens (temporários / atuais):")
-                        for oi, it in enumerate(items_preview):
-                            r0, r1 = st.columns([6,1])
-                            r0.write(f"- [{oi}] {it.get('descricao')} (valor: {it.get('valor')})")
-                            if r1.button("Remover", key=f"rm_dom_item_{s_idx}_{oi}"):
-                                st.session_state.temp_domain_items[dk].pop(oi)
-                                st.rerun()
-                    domain_items_local = st.session_state.temp_domain_items.get(dk, [])
-            # submit element
+                domain_type = st.selectbox("Tipo do domínio", ["estatico", "dinamico"], index=0, key=f"dom_type_{s_idx}")
+                if domain_type == "estatico":
+                    n_items = st.number_input("Quantidade de opções do domínio", min_value=1, max_value=200, value=2, key=f"dom_n_{s_idx}")
+                    # gerar N pares de inputs (descrição + valor)
+                    for i in range(int(n_items)):
+                        desc_key = f"dom_{s_idx}_{i}_desc"
+                        val_key = f"dom_{s_idx}_{i}_val"
+                        st.text_input(f"Opção {i+1} - Descrição", key=desc_key)
+                        st.text_input(f"Opção {i+1} - Valor (opcional)", key=val_key)
+
             if st.form_submit_button("Adicionar elemento"):
                 final_title = st.session_state.get(f"titulo_{s_idx}", "") or titulo or ""
                 if tipo not in ("paragrafo","rotulo") and not final_title.strip():
@@ -291,33 +244,53 @@ with col_builder:
                     }
                     if altura is not None:
                         el["altura"] = int(altura)
-                    if tipo in DOMAIN_TYPES:
-                        dk = make_domain_key(final_title)
-                        el["dominio"] = {"chave": dk}
+                    if colunas is not None:
                         el["colunas"] = int(colunas)
-                        # persist domain items if estatico
-                        if domain_tipo == "estatico":
-                            temp_items = st.session_state.temp_domain_items.get(dk, [])
-                            st.session_state.dominios.setdefault(dk, {"tipo":"estatico", "itens":[]})
-                            # append non-duplicate items
-                            existing_pairs = {(it["descricao"], it["valor"]) for it in st.session_state.dominios[dk]["itens"]}
-                            for it in temp_items:
+                    # domínio
+                    if tipo in DOMAIN_TYPES:
+                        key = normalize_to_domain_key(final_title)
+                        el["dominio"] = {"chave": key}
+                        # persistir domínio estatico com itens se aplicável
+                        dom_type = st.session_state.get(f"dom_type_{s_idx}", "estatico")
+                        if dom_type == "estatico":
+                            n_items_val = int(st.session_state.get(f"dom_n_{s_idx}", 0) or 0)
+                            items = []
+                            invalid = False
+                            for i in range(n_items_val):
+                                desc_key = f"dom_{s_idx}_{i}_desc"
+                                val_key  = f"dom_{s_idx}_{i}_val"
+                                desc = st.session_state.get(desc_key, "").strip()
+                                val = st.session_state.get(val_key, "").strip()
+                                if not desc:
+                                    st.error(f"Descrição da opção {i+1} é obrigatória.")
+                                    invalid = True
+                                else:
+                                    if not val:
+                                        val = desc
+                                    items.append({"descricao": desc, "valor": val})
+                            if invalid:
+                                st.stop()
+                            # salvar sem duplicar
+                            st.session_state.dominios.setdefault(key, {"tipo":"estatico", "itens":[]})
+                            existing = {(it["descricao"], it["valor"]) for it in st.session_state.dominios[key]["itens"]}
+                            for it in items:
                                 pair = (it["descricao"], it["valor"])
-                                if pair not in existing_pairs:
-                                    st.session_state.dominios[dk]["itens"].append(it)
-                                    existing_pairs.add(pair)
-                            # clear temp store for that key
-                            st.session_state.temp_domain_items[dk] = []
-                    # append element
-                    add_element_to_section(s_idx, el)
+                                if pair not in existing:
+                                    st.session_state.dominios[key]["itens"].append(it)
+                                    existing.add(pair)
+                        else:
+                            # dinâmico: ensure key exists as placeholder
+                            st.session_state.dominios.setdefault(key, {"tipo":"dinamico", "itens":[]})
+                    # adicionar elemento à seção
+                    st.session_state.formulario["secoes"][s_idx]["elementos"].append(el)
                     st.success(f"Elemento '{el.get('titulo') or el.get('tipo')}' adicionado.")
                     st.rerun()
+
         st.markdown("</div>", unsafe_allow_html=True)
 
 with col_preview:
     st.markdown('<div class="preview-card">', unsafe_allow_html=True)
     st.header("Pré-visualização (simplificada)")
-    # simplified HTML preview using components.html for nicer scroll area
     def build_preview_html(form):
         html = '<div style="font-family: Arial, sans-serif;">'
         html += f'<h2>{form.get("nome","")}</h2>'
@@ -379,4 +352,4 @@ with col_preview:
     st.code(xml_out, language="xml")
     st.download_button("Baixar XML", data=xml_out, file_name="formulario_v6.4.xml", mime="application/xml")
 
-st.caption("Versão 6.4 Estável — Domínios automáticos (chave gerada a partir do título).")
+st.caption("v6.4 - domínios alinhados ao padrão v4.0 (atributo dominio no elemento, bloco <dominios> com dominioEstatico + dominioItemValor).")
