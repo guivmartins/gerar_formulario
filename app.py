@@ -19,13 +19,11 @@ TIPOS_ELEMENTOS = [
     "grupoCheck", "paragrafo", "rotulo"
 ]
 
-# --- Função para formatar XML ---
 def _prettify_xml(root: ET.Element) -> str:
     xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     parsed = minidom.parseString(xml_bytes)
     return parsed.toprettyxml(indent="   ", encoding="utf-8").decode("utf-8")
 
-# --- Função para gerar XML do formulário ---
 def gerar_xml(formulario: dict) -> str:
     root = ET.Element("gxsi:formulario", {
         "xmlns:gxsi": "http://www.w3.org/2001/XMLSchema-instance",
