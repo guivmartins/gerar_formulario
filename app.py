@@ -230,7 +230,7 @@ with col1:
         secao_atual = st.session_state.formulario["secoes"][last_idx]
         with st.expander(f"➕ Adicionar Campos à seção: {secao_atual.get('titulo','')}", expanded=True):
             with st.form(f"form_add_campo_{last_idx}", clear_on_submit=False):
-                # Controle de estado para colunas e qtd_dom
+                # Controla estado para colunas e quantidade itens domínio
                 col_key = f"colunas_{last_idx}"
                 qtd_dom_key = f"qtd_dom_{last_idx}"
                 if col_key not in st.session_state:
@@ -243,7 +243,6 @@ with col1:
                 obrig_campo = st.checkbox("Obrigatório")
                 largura_campo = st.number_input("Largura (px)", min_value=100, value=450, step=10)
                 in_tabela_campo = st.checkbox("Dentro da tabela?")
-
                 altura_campo = None
                 if tipo_campo == "texto-area":
                     altura_campo = st.number_input("Altura", min_value=50, max_value=500, value=100, step=10)
@@ -258,10 +257,8 @@ with col1:
 
                     for i in range(int(qtd_dom_campo)):
                         val_key = f"desc_{last_idx}_{i}"
-                        if val_key not in st.session_state:
-                            st.session_state[val_key] = ""
-                        val_desc = st.text_input(f"Descrição Item {i + 1}", value=st.session_state[val_key], key=val_key)
-                        st.session_state[val_key] = val_desc
+                        default_val = st.session_state.get(val_key, "")
+                        val_desc = st.text_input(f"Descrição Item {i + 1}", value=default_val, key=val_key)
                         if val_desc.strip():
                             dominios_temp.append({"descricao": val_desc.strip(), "valor": val_desc.strip().upper()})
 
@@ -280,7 +277,7 @@ with col1:
                             "valor": ""
                         }
                         secao_atual["campos"].append(campo_novo)
-                        # Limpar estado após submissão
+                        # limpa o estado após submissão
                         st.session_state[col_key] = 1
                         st.session_state[qtd_dom_key] = 2
                         for i in range(int(qtd_dom_campo)):
