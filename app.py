@@ -54,7 +54,6 @@ def gerar_xml(formulario: dict) -> str:
             obrig = str(bool(campo.get("obrigatorio", False))).lower()
             largura = str(campo.get("largura", 450))
 
-            # Abrir tabela se necessário
             if campo.get("in_tabela"):
                 if tabela_aberta is None:
                     tabela_aberta = ET.SubElement(subelems, "elemento", {"gxsi:type": "tabela"})
@@ -63,13 +62,10 @@ def gerar_xml(formulario: dict) -> str:
                     celulas_tag = ET.SubElement(linha_tag, "celulas")
                     celula_tag = ET.SubElement(celulas_tag, "celula", {"linhas": "1", "colunas": "1"})
                     elementos_destino = ET.SubElement(celula_tag, "elementos")
-                else:
-                    elementos_destino = elementos_destino
             else:
                 tabela_aberta = None
                 elementos_destino = subelems
 
-            # parágrafo / rótulo
             if tipo in ["paragrafo", "rotulo"]:
                 ET.SubElement(elementos_destino, "elemento", {
                     "gxsi:type": tipo,
@@ -78,7 +74,6 @@ def gerar_xml(formulario: dict) -> str:
                 })
                 continue
 
-            # campos com domínio
             if tipo in ["comboBox", "comboFiltro", "grupoRadio", "grupoCheck"] and campo.get("dominios"):
                 chave_dom = titulo.replace(" ", "")[:20].upper()
                 attrs = {
@@ -105,7 +100,6 @@ def gerar_xml(formulario: dict) -> str:
                     })
                 continue
 
-            # campos comuns
             attrs = {
                 "gxsi:type": tipo,
                 "titulo": titulo,
@@ -120,6 +114,23 @@ def gerar_xml(formulario: dict) -> str:
 
     root.append(dominios_global)
     return _prettify_xml(root)
+
+def renderizar_campo(campo, key):
+    tipo = campo.get("tipo")
+    if tipo == "texto":
+        st.text_input(campo.get("titulo", ""), key=key)
+    elif tipo == "texto-area":
+        st.text_area(campo.get("titulo", ""), height=campo.get("altura", 100), key=key)
+    elif tipo in ["comboBox", "comboFiltro", "grupoCheck"]:
+        opcoes = [d["descricao"] for d in campo.get("dominios", [])]
+        st.multiselect(campo.get("titulo", ""), opcoes, key=key)
+    elif tipo == "grupoRadio":
+        opcoes = [d["descricao"] for d in campo.get("dominios", [])]
+        st.radio(campo.get("titulo", ""), opcoes, key=key)
+    elif tipo == "check":
+        st.checkbox(campo.get("titulo", ""), key=key)
+    elif tipo in ["paragrafo", "rotulo"]:
+        st.markdown(f"**{campo.get('titulo')}**")
 
 col1, col2 = st.columns(2)
 
@@ -136,23 +147,21 @@ with col1:
             if st.session_state.nova_secao["titulo"]:
                 st.session_state.formulario["secoes"].append(st.session_state.nova_secao.copy())
                 st.session_state.nova_secao = {"titulo": "", "largura": 500, "campos": []}
-                st.experimental_rerun()
 
     st.markdown("---")
 
-    for s_idx, secao in enumerate(st.session_state.formulario.get("secoes", [])):
-        with st.expander(f"📁 Seção: {secao.get('titulo','(sem título)')}", expanded=False):
-            st.write(f"**Largura:** {secao.get('largura', 500)}")
+    for s_idx, sec in enumerate(st.session_state.formulario.get("secoes", [])):
+        with st.expander(f"📁 Seção: {sec.get('titulo','(sem título)')}", expanded=False):
+            st.write(f"**Largura:** {sec.get('largura', 500)}")
+
             if st.button(f"🗑️ Excluir Seção", key=f"del_sec_{s_idx}"):
                 st.session_state.formulario["secoes"].pop(s_idx)
-                st.experimental_rerun()
 
             st.markdown("### Campos")
-            for c_idx, campo in enumerate(secao.get("campos", [])):
+            for c_idx, campo in enumerate(sec.get("campos", [])):
                 st.text(f"{campo.get('tipo')} - {campo.get('titulo')}")
                 if st.button("Excluir Campo", key=f"del_field_{s_idx}_{c_idx}"):
                     st.session_state.formulario["secoes"][s_idx]["campos"].pop(c_idx)
-                    st.experimental_rerun()
 
     if st.session_state.formulario.get("secoes"):
         last_idx = len(st.session_state.formulario["secoes"]) - 1
@@ -193,17 +202,16 @@ with col1:
                     "valor": ""
                 }
                 secao_atual["campos"].append(campo)
-                st.experimental_rerun()
 
 with col2:
     st.header("📋 Pré-visualização do Formulário")
     st.subheader(st.session_state.formulario.get("nome", ""))
-    for sec in st.session_state.formulario.get("secoes", []):
+    for s_idx, sec in enumerate(st.session_state.formulario.get("secoes", [])):
         st.markdown(f"### {sec.get('titulo')}")
         tabela_aberta = False
         for campo in sec.get("campos", []):
             tipo = campo.get("tipo")
-            key_prev = f"prev_{sec.get('titulo')}_{campo.get('titulo')}"
+            key_prev = f"prev_{s_idx}_{campo.get('titulo')}"
             if campo.get("in_tabela") and not tabela_aberta:
                 st.markdown("<div style='border:1px solid #ccc; padding:5px;'>", unsafe_allow_html=True)
                 tabela_aberta = True
