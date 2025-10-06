@@ -2,135 +2,137 @@ import streamlit as st
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
-st.set_page_config(page_title="Construtor de Formulários", layout="centered")
+st.set_page_config(page_title="Construtor de Formulários 6.2Beta", layout="wide")
 
 # -------------------------
 # Inicialização do estado
 # -------------------------
 if "formulario" not in st.session_state:
-    st.session_state.formulario = {
-        "nome": "",
-        "versao": "1.0",
-        "elementos": [],
-    }
+    st.session_state.formulario = {"nome": "", "versao": "1.0", "secoes": []}
 
 # -------------------------
-# Função de formatação XML
+# Funções auxiliares
 # -------------------------
-def prettify(elem):
-    rough_string = ET.tostring(elem, "utf-8")
+def xml_prettify(elem):
+    rough_string = ET.tostring(elem, encoding="utf-8")
     reparsed = minidom.parseString(rough_string)
-    return reparsed.toprettyxml(indent="   ", encoding="utf-8").decode("utf-8")
+    return reparsed.toprettyxml(indent="   ", encoding="UTF-8").decode("utf-8")
 
-# -------------------------
-# Geração do XML
-# -------------------------
 def gerar_xml():
-    formulario = st.session_state.formulario
+    form = st.session_state.formulario
     root = ET.Element("gxsi:formulario", {
         "xmlns:gxsi": "http://www.w3.org/2001/XMLSchema-instance",
-        "nome": formulario["nome"],
-        "versao": formulario["versao"]
+        "nome": form["nome"],
+        "versao": form["versao"],
     })
-
     elementos_tag = ET.SubElement(root, "elementos")
 
-    # Controle de tabela aberta
-    tabela_aberta = None
+    for secao in form["secoes"]:
+        secao_tag = ET.SubElement(elementos_tag, "elemento", {
+            "gxsi:type": "seccao",
+            "titulo": secao["titulo"],
+            "largura": str(secao["largura"]),
+        })
+        elementos_secao = ET.SubElement(secao_tag, "elementos")
 
-    for el in formulario["elementos"]:
-        if el["type"] == "seccao":
-            sec = ET.SubElement(elementos_tag, "elemento", {
-                "gxsi:type": "seccao",
+        # Agrupar elementos com base no uso de tabela
+        tabela_aberta = None
+        for el in secao["elementos"]:
+            if el.get("in_tabela"):
+                if tabela_aberta is None:
+                    tabela_aberta = ET.SubElement(elementos_secao, "elemento", {"gxsi:type": "tabela"})
+                    linhas_tag = ET.SubElement(tabela_aberta, "linhas")
+                    linha_tag = ET.SubElement(linhas_tag, "linha")
+                    celulas_tag = ET.SubElement(linha_tag, "celulas")
+                    celula_tag = ET.SubElement(celulas_tag, "celula", {"linhas": "1", "colunas": "1"})
+                    elementos_celula = ET.SubElement(celula_tag, "elementos")
+                elementos_destino = elementos_celula
+            else:
+                tabela_aberta = None
+                elementos_destino = elementos_secao
+
+            atributos = {
+                "gxsi:type": el["tipo"],
                 "titulo": el["titulo"],
-                "largura": str(el["largura"])
-            })
-            sec_elems = ET.SubElement(sec, "elementos")
-            tabela_aberta = None
+                "descricao": el["titulo"],
+                "largura": str(el.get("largura", 250)),
+                "obrigatorio": str(el.get("obrigatorio", False)).lower(),
+            }
+            if el["tipo"] in ["paragrafo", "rotulo"]:
+                atributos["valor"] = el["titulo"]
+            elem_tag = ET.SubElement(elementos_destino, "elemento", atributos)
 
-        elif el["type"] == "tabela":
-            tabela_aberta = ET.SubElement(sec_elems, "elemento", {"gxsi:type": "tabela"})
-            linhas = ET.SubElement(tabela_aberta, "linhas")
-            linha = ET.SubElement(linhas, "linha")
-            celulas = ET.SubElement(linha, "celulas")
-            celula = ET.SubElement(celulas, "celula", {"linhas": "1", "colunas": "1"})
-            tabela_aberta = ET.SubElement(celula, "elementos")
+            conteudo = ET.SubElement(elem_tag, "conteudo", {"gxsi:type": "valor"})
+            if el.get("dominio"):
+                ET.SubElement(conteudo, "dominio", {"nome": el["dominio"]})
 
-        else:
-            parent = tabela_aberta if tabela_aberta is not None else sec_elems
-            attrs = {"gxsi:type": el["type"], "titulo": el["titulo"], "descricao": el["titulo"], "largura": str(el["largura"])}
+    ET.SubElement(root, "dominios")  # placeholder
 
-            if el["type"] not in ["paragrafo", "rotulo"]:
-                attrs["obrigatorio"] = "true" if el["obrigatorio"] else "false"
+    return xml_prettify(root)
 
-            if el["type"] in ["comboBox", "comboFiltro", "grupoRadio", "grupoCheck"]:
-                attrs["colunas"] = str(el["colunas"])
-                attrs["dominio"] = el["dominio"]
-
-            if el["type"] in ["paragrafo", "rotulo"]:
-                attrs["valor"] = el["titulo"]
-
-            elem_tag = ET.SubElement(parent, "elemento", attrs)
-
-            if el["type"] not in ["paragrafo", "rotulo"]:
-                conteudo = ET.SubElement(elem_tag, "conteudo", {"gxsi:type": "valor"})
-
-    dominios_tag = ET.SubElement(root, "dominios")
-    dominios_definidos = set(el["dominio"] for el in formulario["elementos"] if el.get("dominio"))
-    for dom in dominios_definidos:
-        dom_tag = ET.SubElement(dominios_tag, "dominio", {"gxsi:type": "dominioEstatico", "chave": dom})
-        itens_tag = ET.SubElement(dom_tag, "itens")
-        ET.SubElement(itens_tag, "item", {"gxsi:type": "dominioItemValor", "descricao": "Opção 1", "valor": "OPCAO1"})
-        ET.SubElement(itens_tag, "item", {"gxsi:type": "dominioItemValor", "descricao": "Opção 2", "valor": "OPCAO2"})
-
-    return prettify(root)
+def render_preview():
+    st.markdown("### 📋 Pré-visualização do Formulário")
+    for secao in st.session_state.formulario["secoes"]:
+        st.subheader(secao["titulo"])
+        tabela_aberta = False
+        for el in secao["elementos"]:
+            if el.get("in_tabela") and not tabela_aberta:
+                st.markdown("<table style='width:100%;border:1px solid #ccc'><tr><td>", unsafe_allow_html=True)
+                tabela_aberta = True
+            if not el.get("in_tabela") and tabela_aberta:
+                st.markdown("</td></tr></table>", unsafe_allow_html=True)
+                tabela_aberta = False
+            st.text(f"{el['tipo'].upper()} - {el['titulo']}")
+        if tabela_aberta:
+            st.markdown("</td></tr></table>", unsafe_allow_html=True)
 
 # -------------------------
-# UI
+# Layout principal
 # -------------------------
-st.title("Construtor de Formulários 6.3beta")
+col1, col2 = st.columns([2, 1])
 
-st.session_state.formulario["nome"] = st.text_input("Nome do Formulário", st.session_state.formulario["nome"])
-st.session_state.formulario["versao"] = st.text_input("Versão", st.session_state.formulario["versao"])
-
-st.subheader("Adicionar Elemento")
-col1, col2, col3 = st.columns(3)
 with col1:
-    tipo = st.selectbox("Tipo do elemento", [
-        "seccao", "tabela", "texto", "texto-area", "data", "moeda",
-        "cpf", "cnpj", "email", "telefone", "check",
-        "comboBox", "comboFiltro", "grupoRadio", "grupoCheck",
-        "paragrafo", "rotulo"
-    ])
+    st.title("Construtor de Formulários 6.2Beta")
+
+    st.session_state.formulario["nome"] = st.text_input("Nome do formulário", st.session_state.formulario["nome"])
+    st.session_state.formulario["versao"] = st.text_input("Versão", st.session_state.formulario["versao"])
+
+    # Adicionar seção
+    with st.expander("➕ Adicionar Seção"):
+        titulo_secao = st.text_input("Título da seção", key="nova_secao_titulo")
+        largura_secao = st.number_input("Largura", value=500, step=25, key="nova_secao_largura")
+        if st.button("Adicionar seção"):
+            st.session_state.formulario["secoes"].append({
+                "titulo": titulo_secao,
+                "largura": largura_secao,
+                "elementos": []
+            })
+            st.rerun()
+
+    # Exibir seções
+    for i, secao in enumerate(st.session_state.formulario["secoes"]):
+        with st.expander(f"📂 {secao['titulo']}"):
+            titulo_elem = st.text_input("Título do elemento", key=f"titulo_elem_{i}")
+            tipo_elem = st.selectbox("Tipo do elemento", [
+                "texto", "numero", "data", "hora",
+                "cpf", "cnpj", "telefone", "email",
+                "paragrafo", "rotulo", "checkbox", "select"
+            ], key=f"tipo_elem_{i}")
+            largura_elem = st.number_input("Largura", value=250, step=25, key=f"largura_elem_{i}")
+            obrig_elem = st.checkbox("Obrigatório", key=f"obrig_elem_{i}")
+            in_tabela = st.checkbox("Dentro da tabela?", key=f"tabela_elem_{i}")
+
+            if st.button("Adicionar elemento", key=f"add_elem_{i}"):
+                secao["elementos"].append({
+                    "titulo": titulo_elem,
+                    "tipo": tipo_elem,
+                    "largura": largura_elem,
+                    "obrigatorio": obrig_elem,
+                    "in_tabela": in_tabela
+                })
+                st.rerun()
+
 with col2:
-    titulo = st.text_input("Título")
-with col3:
-    largura = st.number_input("Largura", value=450, step=25)
-
-obrigatorio = False
-colunas = 1
-dominio = ""
-
-if tipo not in ["paragrafo", "rotulo", "seccao", "tabela"]:
-    obrigatorio = st.checkbox("Obrigatório", value=False)
-
-if tipo in ["comboBox", "comboFiltro", "grupoRadio", "grupoCheck"]:
-    colunas = st.number_input("Colunas", value=1, step=1)
-    dominio = st.text_input("Domínio (chave)")
-
-if st.button("Adicionar"):
-    st.session_state.formulario["elementos"].append({
-        "type": tipo,
-        "titulo": titulo,
-        "largura": largura,
-        "obrigatorio": obrigatorio,
-        "colunas": colunas,
-        "dominio": dominio
-    })
-
-st.subheader("Pré-visualização do Formulário")
-for el in st.session_state.formulario["elementos"]:
-    st.write(f"📌 {el['type']} - {el['titulo']}")
-
-st.subheader("Pré-visualização do XML")
-st.code(gerar_xml(), language="xml")
+    render_preview()
+    st.markdown("### 📄 Pré-visualização XML")
+    st.code(gerar_xml(), language="xml")
