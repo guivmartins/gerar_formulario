@@ -1,4 +1,3 @@
-# app.py - Construtor de Formulários com Domínios e Tabelas (versão 6.4 - versão estavel completa)
 import streamlit as st
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
@@ -25,14 +24,10 @@ TIPOS_ELEMENTOS = [
     "grupoCheck", "paragrafo", "rotulo"
 ]
 
-# -------------------------
-# Função utilitária para XML
-# -------------------------
 def _prettify_xml(root: ET.Element) -> str:
     xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     parsed = minidom.parseString(xml_bytes)
     return parsed.toprettyxml(indent="   ", encoding="utf-8").decode("utf-8")
-
 
 def gerar_xml(formulario: dict) -> str:
     root = ET.Element("gxsi:formulario", {
@@ -52,7 +47,6 @@ def gerar_xml(formulario: dict) -> str:
         })
         subelems = ET.SubElement(sec_el, "elementos")
 
-        # controle de tabela
         tabela_aberta = None
         for campo in sec.get("campos", []):
             tipo = campo.get("tipo", "texto")
@@ -98,7 +92,6 @@ def gerar_xml(formulario: dict) -> str:
                 }
                 ET.SubElement(elementos_destino, "elemento", attrs)
 
-                # domínio global
                 dominio_el = ET.SubElement(dominios_global, "dominio", {
                     "gxsi:type": "dominioEstatico",
                     "chave": chave_dom
@@ -128,21 +121,14 @@ def gerar_xml(formulario: dict) -> str:
     root.append(dominios_global)
     return _prettify_xml(root)
 
-# -------------------------
-# Layout
-# -------------------------
 col1, col2 = st.columns(2)
 
-# -------------------------
-# Coluna 1 - Construtor
-# -------------------------
 with col1:
     st.title("Construtor de Formulários 6.4")
 
     st.session_state.formulario["nome"] = st.text_input("Nome do Formulário", st.session_state.formulario["nome"])
     st.markdown("---")
 
-    # Nova seção
     with st.expander("➕ Adicionar Seção", expanded=True):
         st.session_state.nova_secao["titulo"] = st.text_input("Título da Seção", st.session_state.nova_secao["titulo"])
         st.session_state.nova_secao["largura"] = st.number_input("Largura da Seção", min_value=100, value=st.session_state.nova_secao["largura"], step=10)
@@ -150,27 +136,24 @@ with col1:
             if st.session_state.nova_secao["titulo"]:
                 st.session_state.formulario["secoes"].append(st.session_state.nova_secao.copy())
                 st.session_state.nova_secao = {"titulo": "", "largura": 500, "campos": []}
-                st.rerun()
+                st.experimental_rerun()
 
     st.markdown("---")
 
-    # Seções existentes
-    for s_idx, sec in enumerate(st.session_state.formulario.get("secoes", [])):
-        with st.expander(f"📁 Seção: {sec.get('titulo','(sem título)')}", expanded=False):
-            st.write(f"**Largura:** {sec.get('largura', 500)}")
-
+    for s_idx, secao in enumerate(st.session_state.formulario.get("secoes", [])):
+        with st.expander(f"📁 Seção: {secao.get('titulo','(sem título)')}", expanded=False):
+            st.write(f"**Largura:** {secao.get('largura', 500)}")
             if st.button(f"🗑️ Excluir Seção", key=f"del_sec_{s_idx}"):
                 st.session_state.formulario["secoes"].pop(s_idx)
-                st.rerun()
+                st.experimental_rerun()
 
             st.markdown("### Campos")
-            for c_idx, campo in enumerate(sec.get("campos", [])):
+            for c_idx, campo in enumerate(secao.get("campos", [])):
                 st.text(f"{campo.get('tipo')} - {campo.get('titulo')}")
                 if st.button("Excluir Campo", key=f"del_field_{s_idx}_{c_idx}"):
                     st.session_state.formulario["secoes"][s_idx]["campos"].pop(c_idx)
-                    st.rerun()
+                    st.experimental_rerun()
 
-    # Adicionar campos
     if st.session_state.formulario.get("secoes"):
         last_idx = len(st.session_state.formulario["secoes"]) - 1
         secao_atual = st.session_state.formulario["secoes"][last_idx]
@@ -210,11 +193,8 @@ with col1:
                     "valor": ""
                 }
                 secao_atual["campos"].append(campo)
-                st.rerun()
+                st.experimental_rerun()
 
-# -------------------------
-# Coluna 2 - Pré-visualização
-# -------------------------
 with col2:
     st.header("📋 Pré-visualização do Formulário")
     st.subheader(st.session_state.formulario.get("nome", ""))
@@ -247,9 +227,6 @@ with col2:
         if tabela_aberta:
             st.markdown("</div>", unsafe_allow_html=True)
 
-# -------------------------
-# XML
-# -------------------------
 st.markdown("---")
 st.subheader("📑 Pré-visualização XML")
 st.code(gerar_xml(st.session_state.formulario), language="xml")
