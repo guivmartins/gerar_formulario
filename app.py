@@ -52,13 +52,11 @@ def gerar_xml(formulario: dict) -> str:
         while i < len(campos):
             campo = campos[i]
             if campo.get("in_tabela"):
-                # Criar tabela e linha
                 tabela_el = ET.SubElement(subelems, "elemento", {"gxsi:type": "tabela"})
                 linhas_el = ET.SubElement(tabela_el, "linhas")
                 linha_el = ET.SubElement(linhas_el, "linha")
                 celulas_el = ET.SubElement(linha_el, "celulas")
 
-                # Adicionar células enquanto campos consecutivos pertencem à tabela
                 while i < len(campos) and campos[i].get("in_tabela"):
                     celula_el = ET.SubElement(celulas_el, "celula", {"linhas": "1", "colunas": "1"})
                     elementos_celula = ET.SubElement(celula_el, "elementos")
@@ -69,7 +67,6 @@ def gerar_xml(formulario: dict) -> str:
                     obrig = str(bool(c.get("obrigatorio", False))).lower()
                     largura = str(c.get("largura", 450))
 
-                    # parágrafo / rótulo
                     if tipo in ["paragrafo", "rotulo"]:
                         ET.SubElement(elementos_celula, "elemento", {
                             "gxsi:type": tipo,
@@ -79,7 +76,6 @@ def gerar_xml(formulario: dict) -> str:
                         i += 1
                         continue
 
-                    # campos com domínio
                     if tipo in ["comboBox", "comboFiltro", "grupoRadio", "grupoCheck"] and c.get("dominios"):
                         chave_dom = titulo.replace(" ", "")[:20].upper()
                         attrs = {
@@ -93,7 +89,6 @@ def gerar_xml(formulario: dict) -> str:
                         }
                         ET.SubElement(elementos_celula, "elemento", attrs)
 
-                        # domínio global
                         dominio_el = ET.SubElement(dominios_global, "dominio", {
                             "gxsi:type": "dominioEstatico",
                             "chave": chave_dom
@@ -108,7 +103,6 @@ def gerar_xml(formulario: dict) -> str:
                         i += 1
                         continue
 
-                    # campos comuns
                     attrs = {
                         "gxsi:type": tipo,
                         "titulo": titulo,
@@ -122,13 +116,11 @@ def gerar_xml(formulario: dict) -> str:
                     ET.SubElement(el, "conteudo", {"gxsi:type": "valor"})
                     i += 1
             else:
-                # Campo fora da tabela
                 tipo = campo.get("tipo", "texto")
                 titulo = campo.get("titulo", "")
                 obrig = str(bool(campo.get("obrigatorio", False))).lower()
                 largura = str(campo.get("largura", 450))
 
-                # parágrafo / rótulo
                 if tipo in ["paragrafo", "rotulo"]:
                     ET.SubElement(subelems, "elemento", {
                         "gxsi:type": tipo,
@@ -138,7 +130,6 @@ def gerar_xml(formulario: dict) -> str:
                     i += 1
                     continue
 
-                # campos com domínio
                 if tipo in ["comboBox", "comboFiltro", "grupoRadio", "grupoCheck"] and campo.get("dominios"):
                     chave_dom = titulo.replace(" ", "")[:20].upper()
                     attrs = {
@@ -152,7 +143,6 @@ def gerar_xml(formulario: dict) -> str:
                     }
                     ET.SubElement(subelems, "elemento", attrs)
 
-                    # domínio global
                     dominio_el = ET.SubElement(dominios_global, "dominio", {
                         "gxsi:type": "dominioEstatico",
                         "chave": chave_dom
@@ -167,7 +157,6 @@ def gerar_xml(formulario: dict) -> str:
                     i += 1
                     continue
 
-                # campos comuns
                 attrs = {
                     "gxsi:type": tipo,
                     "titulo": titulo,
@@ -185,7 +174,6 @@ def gerar_xml(formulario: dict) -> str:
     root.append(dominios_global)
     return _prettify_xml(root)
 
-# --- Função para renderizar campos na pré-visualização ---
 def renderizar_campo(campo, key):
     tipo = campo.get("tipo")
     if tipo == "texto":
@@ -203,21 +191,18 @@ def renderizar_campo(campo, key):
     elif tipo in ["paragrafo", "rotulo"]:
         st.markdown(f"**{campo.get('titulo')}**")
 
-# --- Layout da aplicação ---
 col1, col2 = st.columns(2)
 
 with col1:
     st.title("Construtor de Formulários 6.5")
 
-    # Formulário para alterar nome e versão do formulário
     with st.form("formulario_info", clear_on_submit=False):
         st.session_state.formulario["nome"] = st.text_input("Nome do Formulário", st.session_state.formulario["nome"])
         st.session_state.formulario["versao"] = st.text_input("Versão", st.session_state.formulario.get("versao", "1.0"))
-        submitted = st.form_submit_button("Atualizar")
+        st.form_submit_button("Atualizar")
 
     st.markdown("---")
 
-    # Adicionar nova seção
     with st.expander("➕ Adicionar Seção", expanded=True):
         titulo = st.text_input("Título da Seção", key="nova_secao_titulo")
         largura = st.number_input("Largura da Seção", min_value=100, value=500, step=10, key="nova_secao_largura")
@@ -232,7 +217,6 @@ with col1:
 
     st.markdown("---")
 
-    # Mostrar seções e campos existentes
     for s_idx, secao in enumerate(st.session_state.formulario.get("secoes", [])):
         with st.expander(f"📁 Seção: {secao.get('titulo','(sem título)')}", expanded=False):
             st.write(f"**Largura:** {secao.get('largura', 500)}")
@@ -247,7 +231,6 @@ with col1:
                     secao["campos"].pop(c_idx)
                     st.experimental_rerun()
 
-    # Adicionar campos na última seção
     if st.session_state.formulario.get("secoes"):
         last_idx = len(st.session_state.formulario["secoes"]) - 1
         secao_atual = st.session_state.formulario["secoes"][last_idx]
@@ -269,4 +252,56 @@ with col1:
                     colunas_campo = st.number_input("Colunas", min_value=1, max_value=5, value=1)
                     qtd_dom = st.number_input("Qtd. de Itens no Domínio", min_value=1, max_value=50, value=2)
                     for i in range(int(qtd_dom)):
-                        val = st.text_input(f"Descrição Item
+                        val = st.text_input(f"Descrição Item {i + 1}", key=f"desc_{last_idx}_{i}")
+                        if val.strip():
+                            dominios_temp.append({"descricao": val.strip(), "valor": val.strip().upper()})
+
+                if st.form_submit_button("Adicionar Campo"):
+                    if titulo_campo.strip():
+                        campo_novo = {
+                            "titulo": titulo_campo.strip(),
+                            "descricao": titulo_campo.strip(),
+                            "tipo": tipo_campo,
+                            "obrigatorio": obrig_campo,
+                            "largura": largura_campo,
+                            "altura": altura_campo,
+                            "colunas": colunas_campo,
+                            "in_tabela": in_tabela_campo,
+                            "dominios": dominios_temp,
+                            "valor": ""
+                        }
+                        secao_atual["campos"].append(campo_novo)
+                        st.experimental_rerun()
+
+with col2:
+    st.header("📋 Pré-visualização do Formulário")
+    st.subheader(st.session_state.formulario.get("nome", ""))
+    for secao in st.session_state.formulario.get("secoes", []):
+        st.markdown(f"### {secao.get('titulo')}")
+        celulas = []
+        for campo in secao.get("campos", []):
+            if campo.get("in_tabela"):
+                celulas.append(campo)
+            else:
+                if celulas:
+                    st.markdown("<table style='width:100%; border-collapse: collapse; border:1px solid #ccc'>", unsafe_allow_html=True)
+                    st.markdown("<tr>", unsafe_allow_html=True)
+                    for c in celulas:
+                        st.markdown(f"<td style='border:1px solid #ccc; padding:10px; vertical-align: top;'>", unsafe_allow_html=True)
+                        renderizar_campo(c, f"prev_{secao.get('titulo')}_{c.get('titulo')}")
+                        st.markdown("</td>", unsafe_allow_html=True)
+                    st.markdown("</tr></table>", unsafe_allow_html=True)
+                    celulas = []
+                renderizar_campo(campo, f"prev_{secao.get('titulo')}_{campo.get('titulo')}")
+        if celulas:
+            st.markdown("<table style='width:100%; border-collapse: collapse; border:1px solid #ccc'>", unsafe_allow_html=True)
+            st.markdown("<tr>", unsafe_allow_html=True)
+            for c in celulas:
+                st.markdown(f"<td style='border:1px solid #ccc; padding:10px; vertical-align: top;'>", unsafe_allow_html=True)
+                renderizar_campo(c, f"prev_{secao.get('titulo')}_{c.get('titulo')}")
+                st.markdown("</td>", unsafe_allow_html=True)
+            st.markdown("</tr></table>", unsafe_allow_html=True)
+
+st.markdown("---")
+st.subheader("📑 Pré-visualização XML")
+st.code(gerar_xml(st.session_state.formulario), language="xml")
