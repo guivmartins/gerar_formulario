@@ -1,9 +1,8 @@
-# app.py - Construtor de Formulários com Domínios e Tabelas (versão 6.4)
 import streamlit as st
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 
-st.set_page_config(page_title="Construtor de Formulários 6.4", layout="wide")
+st.set_page_config(page_title="Construtor de Formulários 6.4 - Melhorado", layout="wide")
 
 # -------------------------
 # Inicialização do estado
@@ -52,78 +51,143 @@ def gerar_xml(formulario: dict) -> str:
         })
         subelems = ET.SubElement(sec_el, "elementos")
 
-        # controle de tabela
-        tabela_aberta = None
-        for campo in sec.get("campos", []):
-            tipo = campo.get("tipo", "texto")
-            titulo = campo.get("titulo", "")
-            obrig = str(bool(campo.get("obrigatorio", False))).lower()
-            largura = str(campo.get("largura", 450))
-
-            # Abrir tabela se necessário
+        campos = sec.get("campos", [])
+        i = 0
+        while i < len(campos):
+            campo = campos[i]
             if campo.get("in_tabela"):
-                if tabela_aberta is None:
-                    tabela_aberta = ET.SubElement(subelems, "elemento", {"gxsi:type": "tabela"})
-                    linhas_tag = ET.SubElement(tabela_aberta, "linhas")
-                    linha_tag = ET.SubElement(linhas_tag, "linha")
-                    celulas_tag = ET.SubElement(linha_tag, "celulas")
-                    celula_tag = ET.SubElement(celulas_tag, "celula", {"linhas": "1", "colunas": "1"})
-                    elementos_destino = ET.SubElement(celula_tag, "elementos")
-                else:
-                    elementos_destino = elementos_destino
+                # Criar tabela
+                tabela_el = ET.SubElement(subelems, "elemento", {"gxsi:type": "tabela"})
+                linhas_el = ET.SubElement(tabela_el, "linhas")
+
+                # Criar uma linha
+                linha_el = ET.SubElement(linhas_el, "linha")
+                celulas_el = ET.SubElement(linha_el, "celulas")
+
+                # Adicionar células enquanto campos consecutivos são in_tabela
+                while i < len(campos) and campos[i].get("in_tabela"):
+                    celula_el = ET.SubElement(celulas_el, "celula", {"linhas": "1", "colunas": "1"})
+                    elementos_celula = ET.SubElement(celula_el, "elementos")
+
+                    campo_atual = campos[i]
+                    tipo = campo_atual.get("tipo", "texto")
+                    titulo = campo_atual.get("titulo", "")
+                    obrig = str(bool(campo_atual.get("obrigatorio", False))).lower()
+                    largura = str(campo_atual.get("largura", 450))
+
+                    # parágrafo / rótulo
+                    if tipo in ["paragrafo", "rotulo"]:
+                        ET.SubElement(elementos_celula, "elemento", {
+                            "gxsi:type": tipo,
+                            "valor": campo_atual.get("valor", titulo),
+                            "largura": largura
+                        })
+                        i += 1
+                        continue
+
+                    # campos com domínio
+                    if tipo in ["comboBox", "comboFiltro", "grupoRadio", "grupoCheck"] and campo_atual.get("dominios"):
+                        chave_dom = titulo.replace(" ", "")[:20].upper()
+                        attrs = {
+                            "gxsi:type": tipo,
+                            "titulo": titulo,
+                            "descricao": campo_atual.get("descricao", titulo),
+                            "obrigatorio": obrig,
+                            "largura": largura,
+                            "colunas": str(campo_atual.get("colunas", 1)),
+                            "dominio": chave_dom
+                        }
+                        ET.SubElement(elementos_celula, "elemento", attrs)
+
+                        # domínio global
+                        dominio_el = ET.SubElement(dominios_global, "dominio", {
+                            "gxsi:type": "dominioEstatico",
+                            "chave": chave_dom
+                        })
+                        itens_el = ET.SubElement(dominio_el, "itens")
+                        for d in campo_atual["dominios"]:
+                            ET.SubElement(itens_el, "item", {
+                                "gxsi:type": "dominioItemValor",
+                                "descricao": d["descricao"],
+                                "valor": d["valor"]
+                            })
+                        i += 1
+                        continue
+
+                    # campos comuns
+                    attrs = {
+                        "gxsi:type": tipo,
+                        "titulo": titulo,
+                        "descricao": campo_atual.get("descricao", titulo),
+                        "obrigatorio": obrig,
+                        "largura": largura
+                    }
+                    if tipo == "texto-area" and campo_atual.get("altura"):
+                        attrs["altura"] = str(campo_atual.get("altura"))
+                    el = ET.SubElement(elementos_celula, "elemento", attrs)
+                    ET.SubElement(el, "conteudo", {"gxsi:type": "valor"})
+                    i += 1
+                continue  # para não aumentar i novamente aqui
             else:
-                tabela_aberta = None
-                elementos_destino = subelems
+                # Campo fora da tabela
+                tipo = campo.get("tipo", "texto")
+                titulo = campo.get("titulo", "")
+                obrig = str(bool(campo.get("obrigatorio", False))).lower()
+                largura = str(campo.get("largura", 450))
 
-            # parágrafo / rótulo
-            if tipo in ["paragrafo", "rotulo"]:
-                ET.SubElement(elementos_destino, "elemento", {
-                    "gxsi:type": tipo,
-                    "valor": campo.get("valor", titulo),
-                    "largura": largura
-                })
-                continue
+                # parágrafo / rótulo
+                if tipo in ["paragrafo", "rotulo"]:
+                    ET.SubElement(subelems, "elemento", {
+                        "gxsi:type": tipo,
+                        "valor": campo.get("valor", titulo),
+                        "largura": largura
+                    })
+                    i += 1
+                    continue
 
-            # campos com domínio
-            if tipo in ["comboBox", "comboFiltro", "grupoRadio", "grupoCheck"] and campo.get("dominios"):
-                chave_dom = titulo.replace(" ", "")[:20].upper()
+                # campos com domínio
+                if tipo in ["comboBox", "comboFiltro", "grupoRadio", "grupoCheck"] and campo.get("dominios"):
+                    chave_dom = titulo.replace(" ", "")[:20].upper()
+                    attrs = {
+                        "gxsi:type": tipo,
+                        "titulo": titulo,
+                        "descricao": campo.get("descricao", titulo),
+                        "obrigatorio": obrig,
+                        "largura": largura,
+                        "colunas": str(campo.get("colunas", 1)),
+                        "dominio": chave_dom
+                    }
+                    ET.SubElement(subelems, "elemento", attrs)
+
+                    # domínio global
+                    dominio_el = ET.SubElement(dominios_global, "dominio", {
+                        "gxsi:type": "dominioEstatico",
+                        "chave": chave_dom
+                    })
+                    itens_el = ET.SubElement(dominio_el, "itens")
+                    for d in campo["dominios"]:
+                        ET.SubElement(itens_el, "item", {
+                            "gxsi:type": "dominioItemValor",
+                            "descricao": d["descricao"],
+                            "valor": d["valor"]
+                        })
+                    i += 1
+                    continue
+
+                # campos comuns
                 attrs = {
                     "gxsi:type": tipo,
                     "titulo": titulo,
                     "descricao": campo.get("descricao", titulo),
                     "obrigatorio": obrig,
-                    "largura": largura,
-                    "colunas": str(campo.get("colunas", 1)),
-                    "dominio": chave_dom
+                    "largura": largura
                 }
-                ET.SubElement(elementos_destino, "elemento", attrs)
+                if tipo == "texto-area" and campo.get("altura"):
+                    attrs["altura"] = str(campo.get("altura"))
+                el = ET.SubElement(subelems, "elemento", attrs)
+                ET.SubElement(el, "conteudo", {"gxsi:type": "valor"})
 
-                # domínio global
-                dominio_el = ET.SubElement(dominios_global, "dominio", {
-                    "gxsi:type": "dominioEstatico",
-                    "chave": chave_dom
-                })
-                itens_el = ET.SubElement(dominio_el, "itens")
-                for d in campo["dominios"]:
-                    ET.SubElement(itens_el, "item", {
-                        "gxsi:type": "dominioItemValor",
-                        "descricao": d["descricao"],
-                        "valor": d["valor"]
-                    })
-                continue
-
-            # campos comuns
-            attrs = {
-                "gxsi:type": tipo,
-                "titulo": titulo,
-                "descricao": campo.get("descricao", titulo),
-                "obrigatorio": obrig,
-                "largura": largura
-            }
-            if tipo == "texto-area" and campo.get("altura"):
-                attrs["altura"] = str(campo.get("altura"))
-            el = ET.SubElement(elementos_destino, "elemento", attrs)
-            ET.SubElement(el, "conteudo", {"gxsi:type": "valor"})
+                i += 1
 
     root.append(dominios_global)
     return _prettify_xml(root)
@@ -137,11 +201,9 @@ col1, col2 = st.columns(2)
 # Coluna 1 - Construtor
 # -------------------------
 with col1:
-    st.title("Construtor de Formulários 6.4")
-
+    st.title("Construtor de Formulários 6.4 - Melhorado")
     st.session_state.formulario["nome"] = st.text_input("Nome do Formulário", st.session_state.formulario["nome"])
     st.markdown("---")
-
     # Nova seção
     with st.expander("➕ Adicionar Seção", expanded=True):
         st.session_state.nova_secao["titulo"] = st.text_input("Título da Seção", st.session_state.nova_secao["titulo"])
@@ -153,12 +215,10 @@ with col1:
                 st.rerun()
 
     st.markdown("---")
-
     # Seções existentes
     for s_idx, sec in enumerate(st.session_state.formulario.get("secoes", [])):
         with st.expander(f"📁 Seção: {sec.get('titulo','(sem título)')}", expanded=False):
             st.write(f"**Largura:** {sec.get('largura', 500)}")
-
             if st.button(f"🗑️ Excluir Seção", key=f"del_sec_{s_idx}"):
                 st.session_state.formulario["secoes"].pop(s_idx)
                 st.rerun()
@@ -170,11 +230,10 @@ with col1:
                     st.session_state.formulario["secoes"][s_idx]["campos"].pop(c_idx)
                     st.rerun()
 
-    # Adicionar campos
+    # Adicionar campos na última seção
     if st.session_state.formulario.get("secoes"):
         last_idx = len(st.session_state.formulario["secoes"]) - 1
         secao_atual = st.session_state.formulario["secoes"][last_idx]
-
         with st.expander(f"➕ Adicionar Campos à seção: {secao_atual.get('titulo','')}", expanded=True):
             titulo = st.text_input("Título do Campo", key=f"title_{last_idx}")
             tipo = st.selectbox("Tipo do Campo", TIPOS_ELEMENTOS, key=f"type_{last_idx}")
@@ -220,32 +279,58 @@ with col2:
     st.subheader(st.session_state.formulario.get("nome", ""))
     for sec in st.session_state.formulario.get("secoes", []):
         st.markdown(f"### {sec.get('titulo')}")
+
         tabela_aberta = False
+        celulas = []  # para agrupar células numa linha
+
         for campo in sec.get("campos", []):
             tipo = campo.get("tipo")
             key_prev = f"prev_{sec.get('titulo')}_{campo.get('titulo')}"
-            if campo.get("in_tabela") and not tabela_aberta:
-                st.markdown("<div style='border:1px solid #ccc; padding:5px;'>", unsafe_allow_html=True)
-                tabela_aberta = True
-            if not campo.get("in_tabela") and tabela_aberta:
-                st.markdown("</div>", unsafe_allow_html=True)
-                tabela_aberta = False
+            in_tabela = campo.get("in_tabela", False)
 
-            if tipo == "texto":
-                st.text_input(campo.get("titulo", ""), key=key_prev)
-            elif tipo == "texto-area":
-                st.text_area(campo.get("titulo", ""), height=campo.get("altura", 100), key=key_prev)
-            elif tipo in ["comboBox", "comboFiltro", "grupoCheck"]:
-                st.multiselect(campo.get("titulo", ""), [d["descricao"] for d in campo.get("dominios", [])], key=key_prev)
-            elif tipo == "grupoRadio":
-                st.radio(campo.get("titulo", ""), [d["descricao"] for d in campo.get("dominios", [])], key=key_prev)
-            elif tipo == "check":
-                st.checkbox(campo.get("titulo", ""), key=key_prev)
-            elif tipo in ["paragrafo", "rotulo"]:
-                st.markdown(f"**{campo.get('titulo')}**")
+            if in_tabela:
+                celulas.append(campo)
+            else:
+                # Renderizar células em tabela abertas
+                if celulas:
+                    # renderiza a linha de células
+                    st.markdown("<table style='width:100%; border-collapse: collapse; border:1px solid #ccc'>", unsafe_allow_html=True)
+                    st.markdown("<tr>", unsafe_allow_html=True)
+                    for c in celulas:
+                        st.markdown(f"<td style='border:1px solid #ccc; padding:10px; vertical-align: top;'>", unsafe_allow_html=True)
+                        renderizar_campo(c, f"prev_{sec.get('titulo')}_{c.get('titulo')}")
+                        st.markdown("</td>", unsafe_allow_html=True)
+                    st.markdown("</tr></table>", unsafe_allow_html=True)
+                    celulas = []
+                # Render campo normal fora da tabela
+                renderizar_campo(campo, key_prev)
+        # Caso ainda tenha células pendentes exibe ao final
+        if celulas:
+            st.markdown("<table style='width:100%; border-collapse: collapse; border:1px solid #ccc'>", unsafe_allow_html=True)
+            st.markdown("<tr>", unsafe_allow_html=True)
+            for c in celulas:
+                st.markdown(f"<td style='border:1px solid #ccc; padding:10px; vertical-align: top;'>", unsafe_allow_html=True)
+                renderizar_campo(c, f"prev_{sec.get('titulo')}_{c.get('titulo')}")
+                st.markdown("</td>", unsafe_allow_html=True)
+            st.markdown("</tr></table>", unsafe_allow_html=True)
 
-        if tabela_aberta:
-            st.markdown("</div>", unsafe_allow_html=True)
+def renderizar_campo(campo, key):
+    tipo = campo.get("tipo")
+    if tipo == "texto":
+        st.text_input(campo.get("titulo", ""), key=key)
+    elif tipo == "texto-area":
+        st.text_area(campo.get("titulo", ""), height=campo.get("altura", 100), key=key)
+    elif tipo in ["comboBox", "comboFiltro", "grupoCheck"]:
+        opcoes = [d["descricao"] for d in campo.get("dominios", [])]
+        st.multiselect(campo.get("titulo", ""), opcoes, key=key)
+    elif tipo == "grupoRadio":
+        opcoes = [d["descricao"] for d in campo.get("dominios", [])]
+        st.radio(campo.get("titulo", ""), opcoes, key=key)
+    elif tipo == "check":
+        st.checkbox(campo.get("titulo", ""), key=key)
+    elif tipo in ["paragrafo", "rotulo"]:
+        st.markdown(f"**{campo.get('titulo')}**")
+
 
 # -------------------------
 # XML
