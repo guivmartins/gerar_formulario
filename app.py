@@ -176,11 +176,11 @@ with col1:
         secao_atual = st.session_state.formulario["secoes"][last_idx]
 
         with st.expander(f"➕ Adicionar Campos à seção: {secao_atual.get('titulo','')}", expanded=True):
-            titulo = st.text_input("Título do Campo", key=f"title_{last_idx}")
             tipo = st.selectbox("Tipo do Campo", TIPOS_ELEMENTOS, key=f"type_{last_idx}")
+            titulo = st.text_input("Título do Campo", key=f"title_{last_idx}")
             obrig = st.checkbox("Obrigatório", key=f"obrig_{last_idx}")
-            largura = st.number_input("Largura (px)", min_value=100, value=450, step=10, key=f"larg_{last_idx}")
             in_tabela = st.checkbox("Dentro da tabela?", key=f"tabela_{last_idx}")
+            largura = st.number_input("Largura (px)", min_value=100, value=450, step=10, key=f"larg_{last_idx}")
 
             altura = None
             if tipo == "texto-area":
