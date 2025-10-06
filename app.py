@@ -1,4 +1,4 @@
-# app.py - Construtor de Formulários com Domínios completos (versão 6.3 corrigida)
+# app.py - Construtor de Formulários com Domínios completos (versão 6.3.1 corrigida)
 import streamlit as st
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
@@ -185,7 +185,6 @@ with col1:
             if st.session_state.get(key_type) == "texto-area":
                 st.number_input("Altura", min_value=50, value=100, step=10, key=key_alt)
 
-            colunas = None
             dominios_temp = []
             if st.session_state.get(key_type) in ["comboBox", "comboFiltro", "grupoRadio", "grupoCheck"]:
                 st.number_input("Colunas", min_value=1, max_value=5, value=1, key=key_cols)
@@ -221,11 +220,12 @@ with col1:
 with col2:
     st.subheader("📋 Pré-visualização do Formulário")
     st.header(st.session_state.formulario.get("nome", ""))
-    for sec in st.session_state.formulario.get("secoes", []):
+    for s_idx, sec in enumerate(st.session_state.formulario.get("secoes", [])):
         st.subheader(f"• {sec.get('titulo','')}")
-        for campo in sec.get("campos", []):
+        for c_idx, campo in enumerate(sec.get("campos", [])):
             tipo = campo.get("tipo", "texto")
-            key_prev = f"prev_{campo.get('titulo','')}"
+            # chave única
+            key_prev = f"prev_{s_idx}_{c_idx}_{campo.get('titulo','').replace(' ','_')}"
             if tipo == "texto":
                 st.text_input(campo.get("titulo",""), key=key_prev)
             elif tipo == "texto-area":
