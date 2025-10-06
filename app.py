@@ -19,11 +19,13 @@ TIPOS_ELEMENTOS = [
     "grupoCheck", "paragrafo", "rotulo"
 ]
 
+# --- Função para formatar XML ---
 def _prettify_xml(root: ET.Element) -> str:
     xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     parsed = minidom.parseString(xml_bytes)
     return parsed.toprettyxml(indent="   ", encoding="utf-8").decode("utf-8")
 
+# --- Função para gerar XML do formulário ---
 def gerar_xml(formulario: dict) -> str:
     root = ET.Element("gxsi:formulario", {
         "xmlns:gxsi": "http://www.w3.org/2001/XMLSchema-instance",
@@ -175,7 +177,6 @@ def gerar_xml(formulario: dict) -> str:
     root.append(dominios_global)
     return _prettify_xml(root)
 
-
 def renderizar_campo(campo, key):
     tipo = campo.get("tipo")
     if tipo == "texto":
@@ -192,7 +193,6 @@ def renderizar_campo(campo, key):
         st.checkbox(campo.get("titulo", ""), key=key)
     elif tipo in ["paragrafo", "rotulo"]:
         st.markdown(f"**{campo.get('titulo')}**")
-
 
 col1, col2 = st.columns(2)
 
