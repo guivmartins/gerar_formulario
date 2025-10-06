@@ -229,25 +229,41 @@ with col1:
         last_idx = len(st.session_state.formulario["secoes"]) - 1
         secao_atual = st.session_state.formulario["secoes"][last_idx]
         with st.expander(f"➕ Adicionar Campos à seção: {secao_atual.get('titulo','')}", expanded=True):
-            with st.form(f"form_add_campo_{last_idx}", clear_on_submit=True):
+            with st.form(f"form_add_campo_{last_idx}", clear_on_submit=False):
+                # Controle de estado para colunas e qtd_dom
+                col_key = f"colunas_{last_idx}"
+                qtd_dom_key = f"qtd_dom_{last_idx}"
+                if col_key not in st.session_state:
+                    st.session_state[col_key] = 1
+                if qtd_dom_key not in st.session_state:
+                    st.session_state[qtd_dom_key] = 2
+
                 titulo_campo = st.text_input("Título do Campo")
                 tipo_campo = st.selectbox("Tipo do Campo", TIPOS_ELEMENTOS)
                 obrig_campo = st.checkbox("Obrigatório")
                 largura_campo = st.number_input("Largura (px)", min_value=100, value=450, step=10)
                 in_tabela_campo = st.checkbox("Dentro da tabela?")
+
                 altura_campo = None
                 if tipo_campo == "texto-area":
                     altura_campo = st.number_input("Altura", min_value=50, max_value=500, value=100, step=10)
 
                 dominios_temp = []
-                colunas_campo = 1
+                colunas_campo = st.session_state[col_key]
+                qtd_dom_campo = st.session_state[qtd_dom_key]
+
                 if tipo_campo in ["comboBox", "comboFiltro", "grupoRadio", "grupoCheck"]:
-                    colunas_campo = st.number_input("Colunas", min_value=1, max_value=5, value=1)
-                    qtd_dom = st.number_input("Qtd. de Itens no Domínio", min_value=1, max_value=50, value=2)
-                    for i in range(int(qtd_dom)):
-                        val = st.text_input(f"Descrição Item {i + 1}", key=f"desc_{last_idx}_{i}")
-                        if val.strip():
-                            dominios_temp.append({"descricao": val.strip(), "valor": val.strip().upper()})
+                    colunas_campo = st.number_input("Colunas", min_value=1, max_value=5, value=colunas_campo, key=col_key)
+                    qtd_dom_campo = st.number_input("Qtd. de Itens no Domínio", min_value=1, max_value=50, value=qtd_dom_campo, key=qtd_dom_key)
+
+                    for i in range(int(qtd_dom_campo)):
+                        val_key = f"desc_{last_idx}_{i}"
+                        if val_key not in st.session_state:
+                            st.session_state[val_key] = ""
+                        val_desc = st.text_input(f"Descrição Item {i + 1}", value=st.session_state[val_key], key=val_key)
+                        st.session_state[val_key] = val_desc
+                        if val_desc.strip():
+                            dominios_temp.append({"descricao": val_desc.strip(), "valor": val_desc.strip().upper()})
 
                 if st.form_submit_button("Adicionar Campo"):
                     if titulo_campo.strip():
@@ -264,6 +280,13 @@ with col1:
                             "valor": ""
                         }
                         secao_atual["campos"].append(campo_novo)
+                        # Limpar estado após submissão
+                        st.session_state[col_key] = 1
+                        st.session_state[qtd_dom_key] = 2
+                        for i in range(int(qtd_dom_campo)):
+                            val_key = f"desc_{last_idx}_{i}"
+                            if val_key in st.session_state:
+                                del st.session_state[val_key]
 
 with col2:
     st.header("📋 Pré-visualização do Formulário")
